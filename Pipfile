@@ -8,6 +8,8 @@ opencv-python-headless = "*"
 mediapipe = "*"
 deepface = "*"
 image-quality = {git = "https://github.com/ocampor/image-quality"}
+wsq = "*"
+pillow = "*"
 
 [dev-packages]
 

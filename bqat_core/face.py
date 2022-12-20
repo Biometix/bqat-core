@@ -1,4 +1,3 @@
-
 import cv2 as cv
 import imquality.brisque as bk
 import numpy as np
@@ -7,23 +6,22 @@ from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
 from scipy.spatial.distance import euclidean
 
+
 def scan_face(
-    img: np.array,
+    img_path: str,
     confidence: float = 0.7,
 ) -> dict:
     """_summary_
 
     Args:
-        img (object): _description_
-        quality (bool, optional): _description_. Defaults to True.
-        head (bool, optional): _description_. Defaults to True.
-        face (bool, optional): _description_. Defaults to True.
+        img_path (str): _description_
         confidence (float, optional): _description_. Defaults to 0.7.
 
     Returns:
         dict: _description_
     """
     output = {
+        "size": {},
         "bounding_box": {},
         "confidence": None,
         "attributes": {},
@@ -32,8 +30,14 @@ def scan_face(
         "eyes": {},
         "smile": {},
         "quality": None,
-        "log": {}
     }
+
+    try:
+        img = cv.imread(img_path)
+        h, w, _ = img.shape
+        output["size"].update({"height": h, "width": w})
+    except Exception as e:
+        output["log"].append({"load image": str(e)})
 
     try:
         with FaceDetection(
@@ -78,8 +82,7 @@ def scan_face(
             # Crop face region to ensure all components work on same target area.
             target_region = img[bbox["upper"]:bbox["lower"], bbox["left"]:bbox["right"]]
     except Exception as e:
-        output['log'].update({"face detection": str(e)})
-
+        output["log"].update({"face detection": str(e)})
 
     try:
         with FaceMesh(
@@ -107,7 +110,6 @@ def scan_face(
     return output
 
 
-## Assessment functions
 def get_img_quality(img: np.array) -> dict:
     try:
         # if img.shape[-1] == 4:
@@ -297,7 +299,6 @@ def get_orientation(face_mesh: object, img: np.array) -> dict:
             pose_roll = "Level"
         else:
             pose_roll = "Anti-clockwise" if degree_roll > 0 else "Clockwise"
-
     except Exception as e:
         return {"error": str(e)}
     return {"head": {
