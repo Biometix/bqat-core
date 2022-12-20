@@ -47,7 +47,5 @@ def run(file: str, **params) -> dict:
 
     if error:
         meta.update({"error": error})
-    
-    print(meta)
 
     return meta

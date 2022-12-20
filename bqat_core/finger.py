@@ -22,9 +22,10 @@ def scan_finger(
 
     try:
         img = Image.open(img_path)
+        w, h = img.size
         output.update({
-            "Width": img.size[0],
-            "Height": img.size[1],
+            "Width": w,
+            "Height": h,
         })
     except Exception as e:
         output["log"].update({"load image": str(e)})
