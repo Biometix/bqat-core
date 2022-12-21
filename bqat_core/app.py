@@ -1,10 +1,12 @@
 import os
+
 from .face import scan_face
 from .finger import scan_finger
+from .iris import scan_iris
 from .utils import convert
 
 
-def run(file: str, **params) -> dict:
+def scan(file: str, **params) -> dict:
     """_summary_
 
     Args:
@@ -16,6 +18,15 @@ def run(file: str, **params) -> dict:
     meta = {"file": file}
     error = []
 
+    if params.get("mode") == "iris":
+        try:
+            output = scan_iris(
+                img_path=file,
+            )
+            meta.update(output)
+        except Exception as e:
+            error.append(str(e))
+
     if params.get("mode") == "face":
         try:
             output = scan_face(
@@ -26,20 +37,21 @@ def run(file: str, **params) -> dict:
         except Exception as e:
             error.append(str(e))
     
-    if params.get("mode") == "finger":
+    if params.get("mode") in ("finger", "fingerprint"):
         try:
             converted = False
             if (source:=params.get("source")) and (target:=params.get("target")):
                 file = convert(file, source, target)
-                converted = True
+                converted = True if file else False
                 meta.update({
-                    "source": source,
+                    "source": list(source),
                     "target": target
                 })
-            output = scan_finger(
-                img_path=file,
-            )
-            meta.update(output)
+            if file:
+                output = scan_finger(
+                    img_path=file,
+                )
+                meta.update(output)
             if converted: os.remove(file)
         except Exception as e:
             error.append(str(e))

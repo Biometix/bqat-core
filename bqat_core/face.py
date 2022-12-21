@@ -37,7 +37,7 @@ def scan_face(
         h, w, _ = img.shape
         output["size"].update({"height": h, "width": w})
     except Exception as e:
-        output["log"].append({"load image": str(e)})
+        output["log"].update({"load image": str(e)})
 
     try:
         with FaceDetection(
@@ -100,8 +100,8 @@ def scan_face(
     except Exception as e:
         output["log"].update({"face mesh": str(e)})
     
-    output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].update({"image quality": meta["error"]})
-    output.update(meta) if not (meta:=get_attributes(target_region)).get("error") else output["log"].update({"face attributes": meta["error"]})
+    # output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].update({"image quality": meta["error"]})
+    # output.update(meta) if not (meta:=get_attributes(target_region)).get("error") else output["log"].update({"face attributes": meta["error"]})
     output.update(meta) if not (meta:=is_smile(target_region)).get("error") else output["log"].update({"smile detection": meta["error"]})
     output.update(meta) if not (meta:=is_eye_closed(mesh, target_region)).get("error") else output["log"].update({"closed eye detection": meta["error"]})
     output.update(meta) if not (meta:=get_ipd(mesh, target_region)).get("error") else output["log"].update({"ipd": meta["error"]})
@@ -227,8 +227,8 @@ def get_ipd(face_mesh: object, img: np.array) -> dict:
     except Exception as e:
         return {"error": str(e)}
     return {"iris": {
-        "pupil_r": r,
-        "pupil_l": l,
+        "pupil_r": {"x": r[0], "y": r[1]},
+        "pupil_l": {"x": l[0], "y": l[1]},
         "ipd": int(dist**0.5)
     }}
 
