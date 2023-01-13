@@ -1,13 +1,28 @@
 import cv2 as cv
+import csv
 import imquality.brisque as bk
 import numpy as np
 from deepface import DeepFace as df
 from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
 from scipy.spatial.distance import euclidean
+import subprocess
+from io import StringIO
 
 
 def scan_face(
+    img_path: str,
+    engine: str = "default",
+    **params
+) -> dict:
+    if engine == "default":
+        output = default_engine(img_path, params["confidence"])
+    elif engine == "biqt":
+        output = biqt_engine(img_path)
+    return output
+
+
+def default_engine(
     img_path: str,
     confidence: float = 0.7,
 ) -> dict:
@@ -20,24 +35,15 @@ def scan_face(
     Returns:
         dict: _description_
     """
-    output = {
-        "size": {},
-        "bounding_box": {},
-        "confidence": None,
-        "attributes": {},
-        "head": {},
-        "iris": {},
-        "eyes": {},
-        "smile": {},
-        "quality": None,
-    }
+    output = {"log": {}}
 
     try:
         img = cv.imread(img_path)
         h, w, _ = img.shape
-        output["size"].update({"height": h, "width": w})
+        output.update({"image_height": h, "image_width": w})
     except Exception as e:
         output["log"].update({"load image": str(e)})
+        return output
 
     try:
         with FaceDetection(
@@ -77,12 +83,18 @@ def scan_face(
                 "lower": int(h + y),
             }
             output.update({"confidence": detection.score[0]})
-            output.update({"bounding_box": bbox})
+            output.update({
+                "bbox_left": bbox["left"],
+                "bbox_upper": bbox["upper"],
+                "bbox_right": bbox["right"],
+                "bbox_lower": bbox["lower"],
+            })
 
             # Crop face region to ensure all components work on same target area.
             target_region = img[bbox["upper"]:bbox["lower"], bbox["left"]:bbox["right"]]
     except Exception as e:
         output["log"].update({"face detection": str(e)})
+        return output
 
     try:
         with FaceMesh(
@@ -99,14 +111,50 @@ def scan_face(
             raise RuntimeError("fail to get face mesh")
     except Exception as e:
         output["log"].update({"face mesh": str(e)})
+        return output
     
-    # output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].update({"image quality": meta["error"]})
+    output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].update({"image quality": meta["error"]})
     # output.update(meta) if not (meta:=get_attributes(target_region)).get("error") else output["log"].update({"face attributes": meta["error"]})
     output.update(meta) if not (meta:=is_smile(target_region)).get("error") else output["log"].update({"smile detection": meta["error"]})
     output.update(meta) if not (meta:=is_eye_closed(mesh, target_region)).get("error") else output["log"].update({"closed eye detection": meta["error"]})
     output.update(meta) if not (meta:=get_ipd(mesh, target_region)).get("error") else output["log"].update({"ipd": meta["error"]})
     output.update(meta) if not (meta:=get_orientation(mesh, target_region)).get("error") else output["log"].update({"head pose": meta["error"]})
 
+    if not output["log"]:
+        output.pop("log")
+    return output
+
+
+def biqt_engine(
+    img_path: str,
+) -> dict:
+    """_summary_
+
+    Args:
+        img_path (str): _description_
+
+    Returns:
+        dict: _description_
+    """
+    output = {"log": {}}
+
+    output.update(meta) if not (meta:=get_biqt_attr(img_path)).get("error") else output["log"].update({"iris attributes": meta["error"]})
+
+    if not output["log"]:
+        output.pop("log")
+    return output
+
+
+def get_biqt_attr(img_path: str) -> dict:
+    try:
+        output = {}
+        raw = subprocess.check_output(["biqt", "-m", "face", img_path])
+        content = StringIO(raw.decode())
+        attributes = csv.DictReader(content)
+        for attribute in attributes:
+            output.update({attribute.get("Key"): attribute.get("Value")})
+    except Exception as e:
+        return {"error": str(e)}
     return output
 
 
@@ -122,7 +170,7 @@ def get_img_quality(img: np.array) -> dict:
 
 def get_attributes(img: np.array) -> dict:
     try:
-        backends = ["opencv", "ssd", "dlib", "mtcnn", "retinaface", "mediapipe"]
+        # backends = ["opencv", "ssd", "dlib", "mtcnn", "retinaface", "mediapipe"]
         face_attributes = df.analyze(
             img_path=img,  # numpy array (BGR)
             # detector_backend=backends[1],
@@ -134,11 +182,16 @@ def get_attributes(img: np.array) -> dict:
                 "race": df.build_model("Race"),
             },
             enforce_detection=False,
-            prog_bar=False,
+            # prog_bar=False,
         )
     except Exception as e:
         return {"error": str(e)}
-    return {"attributes": face_attributes}
+    return {
+        "age": face_attributes["age"],
+        "gender": face_attributes["gender"],
+        "ethnicity": face_attributes["dominant_race"],
+        "emotion": face_attributes["dominant_emotion"],
+    }
 
 
 def is_smile(img: np.array) -> dict:
@@ -200,10 +253,10 @@ def is_eye_closed(face_mesh: object, img: np.array) -> dict:
         left = True if left_ratio < threshold else False
     except Exception as e:
         return {"error": str(e)}
-    return {"eyes": {
-        "closed_left": left,
-        "closed_right": right,
-    }}
+    return {
+        "eye_closed_left": left,
+        "eye_closed_right": right,
+    }
 
 
 def get_ipd(face_mesh: object, img: np.array) -> dict:
@@ -226,11 +279,13 @@ def get_ipd(face_mesh: object, img: np.array) -> dict:
             dist += (u - v) ** 2
     except Exception as e:
         return {"error": str(e)}
-    return {"iris": {
-        "pupil_r": {"x": r[0], "y": r[1]},
-        "pupil_l": {"x": l[0], "y": l[1]},
-        "ipd": int(dist**0.5)
-    }}
+    return {
+        "ipd": int(dist**0.5),
+        "pupil_right_x": r[0],
+        "pupil_right_y": r[1],
+        "pupil_left_x": l[0],
+        "pupil_left_y": l[1],
+    }
 
 
 def get_orientation(face_mesh: object, img: np.array) -> dict:
@@ -301,11 +356,11 @@ def get_orientation(face_mesh: object, img: np.array) -> dict:
             pose_roll = "Anti-clockwise" if degree_roll > 0 else "Clockwise"
     except Exception as e:
         return {"error": str(e)}
-    return {"head": {
+    return {
         "yaw_pose": pose_yaw,
         "yaw_degree": degree_yaw,
         "pitch_pose": pose_pitch,
         "pitch_degree": degree_pitch,
         "roll_pose": pose_roll,
         "roll_degree": degree_roll,
-    }}
+    }

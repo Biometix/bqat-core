@@ -4,15 +4,19 @@ import os
 
 
 def convert(file, source, target, grayscale=False):
-    if file.rsplit(".")[-1] in extend(source):
+    input_type = file.rsplit(".")[-1]
+    if input_type in extend(source):
         img = Image.open(file)
         if grayscale:
             img = ImageOps.grayscale(img)
             # img = img.convert("L")
         converted = os.path.splitext(file)[0] + f".converted.{target}"
         img.save(converted)
-        return converted
-    return False
+        output = converted
+    else:
+        output = file
+    output_type = output.rsplit(".")[-1]
+    return output, input_type, output_type
 
 
 def extend(suffixes: list):
