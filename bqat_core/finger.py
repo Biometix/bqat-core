@@ -34,6 +34,8 @@ def scan_finger(
     output.update(meta) if not (meta:=get_nfiq2(img_path)).get("error") else output["log"].update({"nfiq2": meta["error"]})
     output.update(meta) if not (meta:=detect_fault(img)).get("error") else output["log"].update({"fault detection": meta["error"]})
 
+    if not output["log"]:
+        output.pop("log")
     return output
 
 

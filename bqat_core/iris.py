@@ -16,7 +16,7 @@ def scan_iris(
     Returns:
         dict: _description_
     """
-    output = {}
+    output = {"log": {}}
     target_size = (640, 480)
     target_format = "png"
     processed = False
@@ -24,12 +24,9 @@ def scan_iris(
     try:
         img = Image.open(img_path)
         w, h = img.size
-        output.update({
-            "width": w,
-            "height": h,
-        })
     except Exception as e:
         output["log"].update({"load image": str(e)})
+        return output
     
     try:
         if w > target_size[0] or h > target_size[1]:
@@ -43,11 +40,14 @@ def scan_iris(
     except Exception as e:
         output["log"].update({"preprocess": str(e)})
         if processed: os.remove(img_path)
+        return output
 
     output.update(meta) if not (meta:=get_attributes(img_path)).get("error") else output["log"].update({"iris attributes": meta["error"]})
 
     if processed: os.remove(img_path)
 
+    if not output["log"]:
+        output.pop("log")
     return output
 
 
