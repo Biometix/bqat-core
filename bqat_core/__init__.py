@@ -1,4 +1,4 @@
-from .app import run
+from .app import scan
 
 __all__ = ["run"]
 __version__ = "1.0.0 beta"

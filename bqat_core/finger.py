@@ -18,7 +18,7 @@ def scan_finger(
     Returns:
         dict: _description_
     """
-    output = {}
+    output = {"log": {}}
 
     try:
         img = Image.open(img_path)
@@ -29,10 +29,13 @@ def scan_finger(
         })
     except Exception as e:
         output["log"].update({"load image": str(e)})
+        return output
 
     output.update(meta) if not (meta:=get_nfiq2(img_path)).get("error") else output["log"].update({"nfiq2": meta["error"]})
     output.update(meta) if not (meta:=detect_fault(img)).get("error") else output["log"].update({"fault detection": meta["error"]})
 
+    if not output["log"]:
+        output.pop("log")
     return output
 
 
