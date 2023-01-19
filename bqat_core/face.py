@@ -2,7 +2,7 @@ import cv2 as cv
 import csv
 import imquality.brisque as bk
 import numpy as np
-from deepface import DeepFace as df
+# from deepface import DeepFace as df
 from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
 from scipy.spatial.distance import euclidean
@@ -16,7 +16,7 @@ def scan_face(
     **params
 ) -> dict:
     if engine == "default":
-        output = default_engine(img_path, params["confidence"])
+        output = default_engine(img_path, params.get("confidence", 0.7))
     elif engine == "biqt":
         output = biqt_engine(img_path)
     return output
