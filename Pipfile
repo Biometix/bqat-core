@@ -4,12 +4,13 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-opencv-python-headless = "*"
+opencv-python = "==4.6.0.66"
+opencv-contrib-python = "==4.6.0.66"
 mediapipe = "*"
-deepface = "*"
 image-quality = {git = "https://github.com/ocampor/image-quality"}
 wsq = "*"
 pillow = "*"
+pytest = "*"
 
 [dev-packages]
 
