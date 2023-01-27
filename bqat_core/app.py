@@ -5,6 +5,9 @@ from .finger import scan_finger
 from .iris import scan_iris
 from .utils import convert
 
+SOURCE_TYPE = ["jpg", "jpeg", "bmp", "jp2", "wsq"]
+TARGET_TYPE = "png"
+
 
 def scan(file: str, **params) -> dict:
     """_summary_
@@ -41,9 +44,10 @@ def scan(file: str, **params) -> dict:
     if params.get("mode") in ("finger", "fingerprint"):
         try:
             converted = False
-            if (source:=params.get("source")) and (target:=params.get("target")):
-                file, input_type, output_type = convert(file, source, target)
-                converted = True if output_type != input_type else False
+            source = params["source"] if params.get("source") else SOURCE_TYPE
+            target = params["target"] if params.get("target") else TARGET_TYPE
+            file, input_type, output_type = convert(file, source, target)
+            converted = True if output_type != input_type else False
             output = scan_finger(
                 img_path=file,
             )

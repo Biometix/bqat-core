@@ -1,7 +1,8 @@
 import cv2 as cv
 import csv
-import imquality.brisque as bk
 import numpy as np
+
+# import imquality.brisque as bk
 # from deepface import DeepFace as df
 from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
@@ -113,7 +114,7 @@ def default_engine(
         output["log"].update({"face mesh": str(e)})
         return output
     
-    output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].update({"image quality": meta["error"]})
+    # output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].update({"image quality": meta["error"]})
     # output.update(meta) if not (meta:=get_attributes(target_region)).get("error") else output["log"].update({"face attributes": meta["error"]})
     output.update(meta) if not (meta:=is_smile(target_region)).get("error") else output["log"].update({"smile detection": meta["error"]})
     output.update(meta) if not (meta:=is_eye_closed(mesh, target_region)).get("error") else output["log"].update({"closed eye detection": meta["error"]})
