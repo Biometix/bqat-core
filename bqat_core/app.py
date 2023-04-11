@@ -3,13 +3,14 @@ import os
 from .face import scan_face
 from .finger import scan_finger
 from .iris import scan_iris
+from .speech import process_speech
 from .utils import convert
 
 SOURCE_TYPE = ["jpg", "jpeg", "bmp", "jp2", "wsq"]
 TARGET_TYPE = "png"
 
 
-def scan(file: str, **params) -> dict:
+def scan(file: str, mode: str, **params):
     """_summary_
 
     Args:
@@ -21,7 +22,7 @@ def scan(file: str, **params) -> dict:
     meta = {"file": file}
     error = []
 
-    if params.get("mode") == "iris":
+    if mode == "iris":
         try:
             output = scan_iris(
                 img_path=file,
@@ -30,18 +31,18 @@ def scan(file: str, **params) -> dict:
         except Exception as e:
             error.append(str(e))
 
-    if params.get("mode") == "face":
+    if mode == "face":
         try:
             output = scan_face(
                 img_path=file,
                 engine=params.get("engine", "default"),
-                confidence=params.get("confidence", 0.7)
+                confidence=params.get("confidence", 0.7),
             )
             meta.update(output)
         except Exception as e:
             error.append(str(e))
-    
-    if params.get("mode") in ("finger", "fingerprint"):
+
+    if mode in ("finger", "fingerprint"):
         try:
             converted = False
             source = params["source"] if params.get("source") else SOURCE_TYPE
@@ -58,7 +59,22 @@ def scan(file: str, **params) -> dict:
 
         except Exception as e:
             error.append(str(e))
-            if converted: os.remove(file)
+            if converted:
+                os.remove(file)
+
+    if mode == "speech":
+        if params["type"] != "folder":
+            try:
+                output = process_speech(input_path=file, input_type=params.get("type"))
+                meta.update(output)
+            except Exception as e:
+                error.append(str(e))
+        else:
+            try:
+                output = process_speech(input_path=file, input_type=params.get("type"))
+                return output
+            except Exception as e:
+                raise e
 
     if error:
         meta.update({"error": error})
