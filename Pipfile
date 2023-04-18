@@ -9,6 +9,8 @@ mediapipe = "*"
 wsq = "*"
 pillow = "*"
 pytest = "*"
+scipy = "*"
+pandas = "*"
 
 [dev-packages]
 

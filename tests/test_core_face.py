@@ -14,6 +14,7 @@ def test_face_default():
     for test in tests:
         test.pop("_id")
         test.pop("tag")
+        test.pop("quality")  # optional
 
         output = scan_face(test.pop("file"), engine="default")
 
