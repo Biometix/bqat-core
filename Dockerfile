@@ -41,14 +41,27 @@ RUN python3.8 -m pip install --upgrade pip && \
     pipenv requirements > requirements.txt && \
     python3.8 -m pip install -r requirements.txt
 
-COPY . .
+COPY bqat_core/misc/NISQA/conda-lock.yml .
 
-ARG Version
-LABEL BQAT.Version=$Version
+COPY bqat_core/misc/NISQA /app/
 
 RUN useradd assessor
 RUN chown -R assessor /app
 USER assessor
+
+RUN curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
+RUN ( echo yes ; echo yes ; echo mamba ; echo yes ) | bash Mambaforge-$(uname)-$(uname -m).sh
+SHELL ["/bin/bash", "-l" ,"-c"]
+RUN mamba install --channel=conda-forge --name=base conda-lock
+RUN conda-lock install --name nisqa conda-lock.yml && \
+    mamba clean -afy
+
+COPY bqat_core ./bqat_core/
+
+COPY tests ./tests/
+
+ARG Version
+LABEL BQAT.Version=$Version
 
 ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
 CMD [ "python3.8 -m pytest tests -v" ]
