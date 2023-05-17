@@ -1,5 +1,8 @@
-import cv2 as cv
 import csv
+import subprocess
+from io import StringIO
+
+import cv2 as cv
 import numpy as np
 
 # import imquality.brisque as bk
@@ -7,15 +10,9 @@ import numpy as np
 from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
 from scipy.spatial.distance import euclidean
-import subprocess
-from io import StringIO
 
 
-def scan_face(
-    img_path: str,
-    engine: str = "default",
-    **params
-) -> dict:
+def scan_face(img_path: str, engine: str = "default", **params) -> dict:
     if engine == "default":
         output = default_engine(img_path, params.get("confidence", 0.7))
     elif engine == "biqt":
@@ -63,7 +60,7 @@ def default_engine(
                     )
                 if not getattr(detections, "detections"):
                     raise RuntimeError("no face found")
-            
+
             score = 0
             index = 0
             for detection in getattr(detections, "detections"):
@@ -84,15 +81,21 @@ def default_engine(
                 "lower": int(h + y),
             }
             output.update({"confidence": detection.score[0]})
-            output.update({
-                "bbox_left": bbox["left"],
-                "bbox_upper": bbox["upper"],
-                "bbox_right": bbox["right"],
-                "bbox_lower": bbox["lower"],
-            })
+            output.update(
+                {
+                    "bbox_left": bbox["left"],
+                    "bbox_upper": bbox["upper"],
+                    "bbox_right": bbox["right"],
+                    "bbox_lower": bbox["lower"],
+                }
+            )
 
             # Crop face region to ensure all components work on same target area.
-            target_region = img[bbox["upper"]:bbox["lower"], bbox["left"]:bbox["right"]]
+            upper = bbox["upper"] if bbox["upper"] > 0 else 0
+            lower = bbox["lower"] if bbox["lower"] < img.shape[0] else img.shape[0]
+            left = bbox["left"] if bbox["left"] > 0 else 0
+            right = bbox["right"] if bbox["right"] < img.shape[1] else img.shape[1]
+            target_region = img[upper:lower, left:right]
     except Exception as e:
         output["log"].update({"face detection": str(e)})
         return output
@@ -113,13 +116,21 @@ def default_engine(
     except Exception as e:
         output["log"].update({"face mesh": str(e)})
         return output
-    
+
     # output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].update({"image quality": meta["error"]})
     # output.update(meta) if not (meta:=get_attributes(target_region)).get("error") else output["log"].update({"face attributes": meta["error"]})
-    output.update(meta) if not (meta:=is_smile(target_region)).get("error") else output["log"].update({"smile detection": meta["error"]})
-    output.update(meta) if not (meta:=is_eye_closed(mesh, target_region)).get("error") else output["log"].update({"closed eye detection": meta["error"]})
-    output.update(meta) if not (meta:=get_ipd(mesh, target_region)).get("error") else output["log"].update({"ipd": meta["error"]})
-    output.update(meta) if not (meta:=get_orientation(mesh, target_region)).get("error") else output["log"].update({"head pose": meta["error"]})
+    output.update(meta) if not (meta := is_smile(target_region)).get(
+        "error"
+    ) else output["log"].update({"smile detection": meta["error"]})
+    output.update(meta) if not (meta := is_eye_closed(mesh, target_region)).get(
+        "error"
+    ) else output["log"].update({"closed eye detection": meta["error"]})
+    output.update(meta) if not (meta := get_ipd(mesh, target_region)).get(
+        "error"
+    ) else output["log"].update({"ipd": meta["error"]})
+    output.update(meta) if not (meta := get_orientation(mesh, target_region)).get(
+        "error"
+    ) else output["log"].update({"head pose": meta["error"]})
 
     if not output["log"]:
         output.pop("log")
@@ -139,7 +150,9 @@ def biqt_engine(
     """
     output = {"log": {}}
 
-    output.update(meta) if not (meta:=get_biqt_attr(img_path)).get("error") else output["log"].update({"iris attributes": meta["error"]})
+    output.update(meta) if not (meta := get_biqt_attr(img_path)).get(
+        "error"
+    ) else output["log"].update({"iris attributes": meta["error"]})
 
     if not output["log"]:
         output.pop("log")
@@ -226,17 +239,17 @@ def is_eye_closed(face_mesh: object, img: np.array) -> dict:
         r_u, r_l, r_c, l_u, l_l, l_c = [], [], [], [], [], []
         for i, mark in enumerate(face_mesh.landmark):
             if i in right_upper:
-                r_u.append((mark.x*img_w, mark.y*img_h))
+                r_u.append((mark.x * img_w, mark.y * img_h))
             if i in right_lower:
-                r_l.append((mark.x*img_w, mark.y*img_h))
+                r_l.append((mark.x * img_w, mark.y * img_h))
             if i in right_corner:
-                r_c.append((mark.x*img_w, mark.y*img_h))
+                r_c.append((mark.x * img_w, mark.y * img_h))
             if i in left_lower:
-                l_l.append((mark.x*img_w, mark.y*img_h))
+                l_l.append((mark.x * img_w, mark.y * img_h))
             if i in left_upper:
-                l_u.append((mark.x*img_w, mark.y*img_h))
+                l_u.append((mark.x * img_w, mark.y * img_h))
             if i in left_corner:
-                l_c.append((mark.x*img_w, mark.y*img_h))
+                l_c.append((mark.x * img_w, mark.y * img_h))
 
         r_l.reverse()
         l_u.reverse()
@@ -267,11 +280,19 @@ def get_ipd(face_mesh: object, img: np.array) -> dict:
         left_iris = [474, 475, 476, 477]
 
         r_x, r_y, l_x, l_y = [0] * 4
-        r_x = np.mean([lm.x for i, lm in enumerate(face_mesh.landmark) if i in right_iris])
-        r_y = np.mean([lm.y for i, lm in enumerate(face_mesh.landmark) if i in right_iris])
+        r_x = np.mean(
+            [lm.x for i, lm in enumerate(face_mesh.landmark) if i in right_iris]
+        )
+        r_y = np.mean(
+            [lm.y for i, lm in enumerate(face_mesh.landmark) if i in right_iris]
+        )
 
-        l_x = np.mean([lm.x for i, lm in enumerate(face_mesh.landmark) if i in left_iris])
-        l_y = np.mean([lm.y for i, lm in enumerate(face_mesh.landmark) if i in left_iris])
+        l_x = np.mean(
+            [lm.x for i, lm in enumerate(face_mesh.landmark) if i in left_iris]
+        )
+        l_y = np.mean(
+            [lm.y for i, lm in enumerate(face_mesh.landmark) if i in left_iris]
+        )
 
         r = (int(r_x * img_w), int(r_y * img_h))
         l = (int(l_x * img_w), int(l_y * img_h))
