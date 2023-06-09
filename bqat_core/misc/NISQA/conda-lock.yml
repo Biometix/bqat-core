@@ -1080,11 +1080,13 @@ package:
   platform: linux-64
   url: https://files.pythonhosted.org/packages/fe/51/af0842a901b6871d232634dc5c2368f60f73194053479575760f0f4ac117/llvmlite-0.37.0-cp39-cp39-manylinux2014_x86_64.whl
   version: 0.37.0
-- dependencies: {}
+- category: main
+  dependencies: {}
   hash:
     sha256: 5d050e1e4bc9ddb8656d7b4f414557720ddcca23a5b88dd7cff65e847864c400
   manager: pip
   name: numpy
+  optional: false
   platform: linux-64
   url: https://files.pythonhosted.org/packages/cc/7f/0d414a6826b626c6fea98d98336e1f62cf9dd387c776da8dc83ce2a082b6/numpy-1.20.3-cp39-cp39-manylinux_2_12_x86_64.manylinux2010_x86_64.whl
   version: 1.20.3
