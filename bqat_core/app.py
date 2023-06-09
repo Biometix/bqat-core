@@ -63,18 +63,17 @@ def scan(file: str, mode: str, **params):
                 os.remove(file)
 
     if mode == "speech":
-        if params["type"] != "folder":
+        if params["type"] == "file":
             try:
                 output = process_speech(input_path=file, input_type=params.get("type"))
                 meta.update(output)
             except Exception as e:
                 error.append(str(e))
+        elif params["type"] == "folder":
+            output = process_speech(input_path=file, input_type=params.get("type"))
+            meta.update(output)
         else:
-            try:
-                output = process_speech(input_path=file, input_type=params.get("type"))
-                return output
-            except Exception as e:
-                raise e
+            raise RuntimeError("task type not provided")
 
     if error:
         meta.update({"error": error})
