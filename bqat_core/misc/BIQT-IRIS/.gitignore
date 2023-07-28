@@ -1,0 +1,10 @@
+*.o
+*.so
+*.dll
+*.dylib
+*.lib
+build
+target
+.idea
+.vscode
+cmake-build-debug
