@@ -110,27 +110,35 @@ def default_engine(
             mesh = model.process(cv.cvtColor(target_region, cv.COLOR_BGR2RGB))
 
         if mesh.multi_face_landmarks:
+            face_mesh = True
             mesh = mesh.multi_face_landmarks[0]
         else:
+            face_mesh = False
             raise RuntimeError("fail to get face mesh")
+
     except Exception as e:
         output["log"].update({"face mesh": str(e)})
-        return output
+        # return output
 
     # output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].update({"image quality": meta["error"]})
     # output.update(meta) if not (meta:=get_attributes(target_region)).get("error") else output["log"].update({"face attributes": meta["error"]})
     output.update(meta) if not (meta := is_smile(target_region)).get(
         "error"
     ) else output["log"].update({"smile detection": meta["error"]})
-    output.update(meta) if not (meta := is_eye_closed(mesh, target_region)).get(
-        "error"
-    ) else output["log"].update({"closed eye detection": meta["error"]})
-    output.update(meta) if not (meta := get_ipd(mesh, target_region)).get(
-        "error"
-    ) else output["log"].update({"ipd": meta["error"]})
-    output.update(meta) if not (meta := get_orientation(mesh, target_region)).get(
-        "error"
-    ) else output["log"].update({"head pose": meta["error"]})
+
+    if face_mesh:
+        output.update(meta) if not (meta := is_eye_closed(mesh, target_region)).get(
+            "error"
+        ) else output["log"].update({"closed eye detection": meta["error"]})
+        output.update(meta) if not (meta := get_ipd(mesh, target_region)).get(
+            "error"
+        ) else output["log"].update({"ipd": meta["error"]})
+        output.update(meta) if not (meta := get_orientation(mesh, target_region)).get(
+            "error"
+        ) else output["log"].update({"head pose": meta["error"]})
+        output.update(meta) if not (meta := is_glasses(mesh, target_region)).get(
+            "error"
+        ) else output["log"].update({"glasses detection": meta["error"]})
 
     if not output["log"]:
         output.pop("log")
@@ -152,7 +160,7 @@ def biqt_engine(
 
     output.update(meta) if not (meta := get_biqt_attr(img_path)).get(
         "error"
-    ) else output["log"].update({"iris attributes": meta["error"]})
+    ) else output["log"].update({"face attributes": meta["error"]})
 
     if not output["log"]:
         output.pop("log")
@@ -162,50 +170,56 @@ def biqt_engine(
 def get_biqt_attr(img_path: str) -> dict:
     try:
         output = {}
-        raw = subprocess.check_output(["biqt", "-m", "face", img_path])
+        try:
+            raw = subprocess.check_output(["biqt", "-m", "face", img_path])
+        except Exception:
+            raise RuntimeError("Engine failed")
         content = StringIO(raw.decode())
         attributes = csv.DictReader(content)
         for attribute in attributes:
-            output.update({attribute.get("Key"): attribute.get("Value")})
+            output.update({attribute.get("Key"): float(attribute.get("Value"))})
+        if not output:
+            raise RuntimeError("Engine failed")
+        output["quality"] *= 10  # Observe ISO/IEC 29794-1
     except Exception as e:
         return {"error": str(e)}
     return output
 
 
-def get_img_quality(img: np.array) -> dict:
-    try:
-        # if img.shape[-1] == 4:
-        #     img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-        image_quality = bk.score(img)
-    except Exception as e:
-        return {"error": str(e)}
-    return {"quality": image_quality}
+# def get_img_quality(img: np.array) -> dict:
+#     try:
+#         # if img.shape[-1] == 4:
+#         #     img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+#         image_quality = bk.score(img)
+#     except Exception as e:
+#         return {"error": str(e)}
+#     return {"quality": image_quality}
 
 
-def get_attributes(img: np.array) -> dict:
-    try:
-        # backends = ["opencv", "ssd", "dlib", "mtcnn", "retinaface", "mediapipe"]
-        face_attributes = df.analyze(
-            img_path=img,  # numpy array (BGR)
-            # detector_backend=backends[1],
-            actions=["age", "gender", "race", "emotion"],
-            models={
-                "age": df.build_model("Age"),
-                "gender": df.build_model("Gender"),
-                "emotion": df.build_model("Emotion"),
-                "race": df.build_model("Race"),
-            },
-            enforce_detection=False,
-            # prog_bar=False,
-        )
-    except Exception as e:
-        return {"error": str(e)}
-    return {
-        "age": face_attributes["age"],
-        "gender": face_attributes["gender"],
-        "ethnicity": face_attributes["dominant_race"],
-        "emotion": face_attributes["dominant_emotion"],
-    }
+# def get_attributes(img: np.array) -> dict:
+#     try:
+#         # backends = ["opencv", "ssd", "dlib", "mtcnn", "retinaface", "mediapipe"]
+#         face_attributes = df.analyze(
+#             img_path=img,  # numpy array (BGR)
+#             # detector_backend=backends[1],
+#             actions=["age", "gender", "race", "emotion"],
+#             models={
+#                 "age": df.build_model("Age"),
+#                 "gender": df.build_model("Gender"),
+#                 "emotion": df.build_model("Emotion"),
+#                 "race": df.build_model("Race"),
+#             },
+#             enforce_detection=False,
+#             # prog_bar=False,
+#         )
+#     except Exception as e:
+#         return {"error": str(e)}
+#     return {
+#         "age": face_attributes["age"],
+#         "gender": face_attributes["gender"],
+#         "ethnicity": face_attributes["dominant_race"],
+#         "emotion": face_attributes["dominant_emotion"],
+#     }
 
 
 def is_smile(img: np.array) -> dict:
@@ -386,3 +400,35 @@ def get_orientation(face_mesh: object, img: np.array) -> dict:
         "roll_pose": pose_roll,
         "roll_degree": degree_roll,
     }
+
+
+def is_glasses(face_mesh: object, img: np.array) -> dict:
+    try:
+        img_h, img_w, _ = img.shape
+
+        nose_bridge = [6, 197, 195, 5, 4, 1, 237, 44, 274, 457]
+
+        nose_bridge_x = []
+        nose_bridge_y = []
+        for i, lm in enumerate(face_mesh.landmark):
+            if i in nose_bridge:
+                nose_bridge_x.append(lm.x)
+                nose_bridge_y.append(lm.y)
+            if i == 8:
+                y_min = int(lm.y * img_h)
+            if i == 5:
+                y_max = int(lm.y * img_h)
+
+        x_min = int(min(nose_bridge_x) * img_w)
+        x_max = int(max(nose_bridge_x) * img_w)
+
+        target_area = img[x_min:x_max, y_min:y_max]
+
+        bl = cv.GaussianBlur(target_area, (3, 3), sigmaX=0, sigmaY=0)
+        eg = cv.Canny(bl, 100, 200)
+
+        center = eg.T[(int(len(eg.T) / 2))]
+
+    except Exception as e:
+        return {"error": str(e)}
+    return {"glasses": True if 255 in center else False}
