@@ -29,7 +29,6 @@ def scan_iris(
 
     try:
         result = resize_input(img_path)
-        print(result)
         if result["resize"]:
             output["log"].update(
                 {"resize": f"input resized to ({result['width']}, {result['height']})"}
