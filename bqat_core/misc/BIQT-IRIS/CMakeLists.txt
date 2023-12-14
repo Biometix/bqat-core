@@ -42,6 +42,7 @@ endif()
 set(CMAKE_INSTALL_PREFIX "${BIQT_HOME}/providers")
 
 find_package(OpenCV REQUIRED core highgui)
+find_package(jsoncpp REQUIRED)
 find_library(JSONCPP NAMES libjsoncpp jsoncpp HINTS ${BIQT_HOME}/lib ${BIQT_HOME}/lib64 ${BIQT_HOME}/bin ${BIQT_HOME}/../../lib ${BIQT_HOME}/../../lib64 ${BIQT_HOME}/../../bin)
 find_library(BIQTAPI NAMES libbiqtapi biqtapi HINTS ${BIQT_HOME}/lib ${BIQT_HOME}/lib64 ${BIQT_HOME}/bin ${BIQT_HOME}/../../lib ${BIQT_HOME}/../../lib64 ${BIQT_HOME}/../../bin)
 
@@ -61,7 +62,7 @@ file(GLOB BIQTIris_SRC "src/*.cpp")
 
 add_library(BIQTIris SHARED ${BIQTIris_SRC})
 
-target_link_libraries(BIQTIris ${JSONCPP} ${BIQTAPI} ${OpenCV_LIBS} ${CMAKE_DL_LIBS})
+target_link_libraries(BIQTIris jsoncpp_lib ${JSONCPP} ${BIQTAPI} ${OpenCV_LIBS} ${CMAKE_DL_LIBS})
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/descriptor.json DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
