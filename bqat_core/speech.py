@@ -158,7 +158,7 @@ def get_metrics_synthesized_batch(folder: str) -> pd.DataFrame:
         metrics_synthesized.rename(
             columns={
                 "deg": "file",
-                "mos_pred": "Naturalness",
+                "mos_pred": "naturalness",
             },
             inplace=True,
         )
