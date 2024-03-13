@@ -1,4 +1,5 @@
 import os
+import re
 
 import wsq
 from PIL import Image, ImageOps
@@ -32,3 +33,7 @@ def extend(suffixes: list):
         extended.append(s.upper())
         extended.append(s)
     return extended
+
+
+def camel_to_snake(name: str) -> str:
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()

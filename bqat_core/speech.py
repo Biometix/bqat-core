@@ -59,13 +59,13 @@ def get_metrics_transmitted(file_path: str) -> dict:
         )
         content = StringIO(raw.decode())
         output = next(csv.DictReader(content))
-        output = {"Quality" if k == "mos_pred" else k: v for k, v in output.items()}
-        output = {"Noisiness" if k == "noi_pred" else k: v for k, v in output.items()}
-        output = {"Coloration" if k == "col_pred" else k: v for k, v in output.items()}
+        output = {"quality" if k == "mos_pred" else k: v for k, v in output.items()}
+        output = {"noisiness" if k == "noi_pred" else k: v for k, v in output.items()}
+        output = {"coloration" if k == "col_pred" else k: v for k, v in output.items()}
         output = {
-            "Discontinuity" if k == "dis_pred" else k: v for k, v in output.items()
+            "discontinuity" if k == "dis_pred" else k: v for k, v in output.items()
         }
-        output = {"Loudness" if k == "loud_pred" else k: v for k, v in output.items()}
+        output = {"loudness" if k == "loud_pred" else k: v for k, v in output.items()}
         output.pop("deg")
         output.pop("model")
     except Exception as e:
@@ -97,7 +97,7 @@ def get_metrics_synthesized(file_path: str) -> dict:
         )
         content = StringIO(raw.decode())
         output = next(csv.DictReader(content))
-        output = {"Naturalness" if k == "mos_pred" else k: v for k, v in output.items()}
+        output = {"naturalness" if k == "mos_pred" else k: v for k, v in output.items()}
         output.pop("deg")
         output.pop("model")
     except Exception as e:
@@ -195,11 +195,11 @@ def get_metrics_transmitted_batch(folder: str) -> pd.DataFrame:
         metrics_transmitted.rename(
             columns={
                 "deg": "file",
-                "mos_pred": "Quality",
-                "noi_pred": "Noisiness",
-                "dis_pred": "Discontinuity",
-                "col_pred": "Coloration",
-                "loud_pred": "Loudness",
+                "mos_pred": "quality",
+                "noi_pred": "noisiness",
+                "dis_pred": "discontinuity",
+                "col_pred": "coloration",
+                "loud_pred": "loudness",
             },
             inplace=True,
         )

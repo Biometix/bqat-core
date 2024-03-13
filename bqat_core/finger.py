@@ -1,8 +1,10 @@
 import csv
-from PIL import Image, ImageOps
-import numpy as np
 import subprocess
 from io import StringIO
+
+import numpy as np
+from PIL import Image, ImageOps
+from .utils import camel_to_snake
 
 # from scipy.stats import normaltest
 
@@ -23,10 +25,12 @@ def scan_finger(
     try:
         img = Image.open(img_path)
         w, h = img.size
-        output.update({
-            "Width": w,
-            "Height": h,
-        })
+        output.update(
+            {
+                "image_width": w,
+                "image_height": h,
+            }
+        )
     except Exception as e:
         output["log"].update({"load image": str(e)})
         return output
@@ -44,16 +48,17 @@ def get_nfiq2(img_path: str) -> dict:
         raw = subprocess.check_output(["nfiq2", "-F", "-a", "-i", img_path])
         content = StringIO(raw.decode())
         output = next(csv.DictReader(content))
-        output = {
-            "NFIQ2" if k == "QualityScore" else k: v for k, v in output.items()
-        }
         output.pop("FingerCode")
         output.pop("Filename")
+        output = {
+            "NFIQ2" if k == "QualityScore" else camel_to_snake(k): v
+            for k, v in output.items()
+        }
     except Exception as e:
         return {"error": str(e)}
-    if (error := output.get("OptionalError")) != "NA":
+    if (error := output.get(camel_to_snake("OptionalError"))) != "NA":
         return {"error": error}
-    output.pop("OptionalError")
+    output.pop(camel_to_snake("OptionalError"))
     return output
 
 
@@ -74,4 +79,4 @@ def detect_fault(img: object) -> dict:
         # return {"edge_skew": lstat[0] + rstat[0] }
     except Exception as e:
         return {"error": str(e)}
-    return {"EdgeStd": (left_std + right_std) / 2.0}
+    return {"edge_std": (left_std + right_std) / 2.0}
