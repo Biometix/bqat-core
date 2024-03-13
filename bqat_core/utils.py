@@ -1,10 +1,16 @@
-from PIL import Image, ImageOps
-import wsq
 import os
+import re
+
+import wsq
+from PIL import Image, ImageOps
 
 
 def convert(file, source, target, grayscale=False):
     input_type = file.rsplit(".")[-1]
+    if input_type == target:
+        return file, input_type, target
+    if target == "wsq":
+        grayscale = True
     if input_type in extend(source):
         img = Image.open(file)
         if grayscale:
@@ -27,3 +33,7 @@ def extend(suffixes: list):
         extended.append(s.upper())
         extended.append(s)
     return extended
+
+
+def camel_to_snake(name: str) -> str:
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
