@@ -5,6 +5,7 @@ from io import StringIO
 
 import cv2 as cv
 import imutils
+from PIL import Image, ImageOps
 
 
 def scan_iris(
@@ -28,10 +29,12 @@ def scan_iris(
         return output
 
     try:
+        # result = crop_input(img_path) # won't work better
         result = resize_input(
             img_path,
-            upper=(640, 480),
-        )  # lower resolution to improve robustness #17
+            upper=(630, 470),
+            lower=(400, 400),
+        )  # reduce range resolution to improve robustness #17
         if result["resize"]:
             output["log"].update(
                 {"resize": f"input resized to ({result['width']}, {result['height']})"}
@@ -86,7 +89,7 @@ def resize_input(
     input,
     upper=(1000, 680),
     lower=(256, 256),
-    format="png",
+    format="",
     grayscale=False,
 ):
     try:
@@ -100,7 +103,9 @@ def resize_input(
     if w > upper[0] or h > upper[1] or w < lower[0] or h < lower[1]:
         result["resize"] = True
 
+        inf_count = 5  # break inf loop
         while w > upper[0] or h > upper[1] or w < lower[0] or h < lower[1]:
+            inf_count -= 1
             if w > upper[0]:
                 img = imutils.resize(img, width=upper[0])
                 h, w, _ = img.shape
@@ -113,6 +118,8 @@ def resize_input(
             if h < lower[1]:
                 img = imutils.resize(img, height=lower[1])
                 h, w, _ = img.shape
+            if inf_count < 0:
+                break
 
     if result["resize"]:
         if grayscale:
@@ -128,5 +135,44 @@ def resize_input(
         result["path"] = img_path
         result["width"] = w
         result["height"] = h
+
+    return result
+
+
+def crop_input(
+    input,
+):
+    """Older version of BIQT claims it supports only 480 by 480 or 640 by 480 input
+
+    Args:
+        input (_type_): _description_
+        target (tuple, optional): _description_. Defaults to (640,480).
+    """
+    try:
+        img = Image.open(input)
+        w, h = img.size
+    except Exception as e:
+        raise RuntimeError(f"failed to load: {str(e)}")
+
+    result = {"resize": False, "width": w, "height": h, "path": input}
+
+    if h == 480 and (w == 480 or 640):
+        return result
+
+    if (w / h) > 640 / 480 or (w / h) > 1.1:
+        img = ImageOps.fit(img, size=(640, 480))
+
+    else:
+        img = ImageOps.fit(img, size=(480, 480))
+
+    filename, format = os.path.splitext(input)[0], os.path.splitext(input)[1]
+    img_path = filename + f".resized{format}"
+    img.save(img_path)
+
+    w, h = img.size
+    result["resize"] = True
+    result["path"] = img_path
+    result["width"] = w
+    result["height"] = h
 
     return result
