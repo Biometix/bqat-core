@@ -34,10 +34,16 @@ def scan_iris(
             img_path,
             upper=(630, 470),
             lower=(400, 400),
+            format="png",
         )  # reduce range resolution to improve robustness #17
         if result["resize"]:
             output["log"].update(
                 {"resize": f"input resized to ({result['width']}, {result['height']})"}
+            )
+            img_path = result["path"]
+        if result["format"]:
+            output["log"].update(
+                {"convert": f"input converted to {result['format'].upper()} format"}
             )
             img_path = result["path"]
     except Exception as e:
@@ -48,7 +54,7 @@ def scan_iris(
         "error"
     ) else output["log"].update({"iris attributes": meta["error"]})
 
-    if result["resize"]:
+    if result["resize"] or result["convert"]:
         os.remove(img_path)
         output.update(
             {
@@ -96,7 +102,14 @@ def resize_input(
         raw = cv.imread(input)
         img = raw.copy()
         h, w, _ = img.shape
-        result = {"resize": False, "width": w, "height": h, "path": input}
+        result = {
+            "resize": False,
+            "convert": False,
+            "format": format,
+            "width": w,
+            "height": h,
+            "path": input,
+        }
     except Exception as e:
         raise RuntimeError(f"failed to load: {str(e)}")
 
@@ -121,20 +134,28 @@ def resize_input(
             if inf_count < 0:
                 break
 
+    if grayscale:
+        img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        # img = cv.GaussianBlur(img, (11, 11), 0)
+
     if result["resize"]:
-        if grayscale:
-            img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-            # img = cv.GaussianBlur(img, (11, 11), 0)
         if format:
+            result["convert"] = True
             img_path = os.path.splitext(input)[0] + f".resized.{format}"
         else:
             filename, format = os.path.splitext(input)[0], os.path.splitext(input)[1]
             img_path = filename + f".resized.{format}"
+            result["format"] = format
         cv.imwrite(img_path, img)
+    else:
+        if format:
+            result["convert"] = True
+            img_path = os.path.splitext(input)[0] + f".converted.{format}"
+            cv.imwrite(img_path, img)
 
-        result["path"] = img_path
-        result["width"] = w
-        result["height"] = h
+    result["path"] = img_path
+    result["width"] = w
+    result["height"] = h
 
     return result
 
