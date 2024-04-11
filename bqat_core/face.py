@@ -11,12 +11,17 @@ from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
 from scipy.spatial.distance import euclidean
 
+from .utils import camel_to_snake
 
-def scan_face(img_path: str, engine: str = "default", **params) -> dict:
-    if engine == "default":
+
+def scan_face(img_path: str, engine: str = "bqat", **params) -> dict:
+    if engine.casefold() == "bqat":
         output = default_engine(img_path, params.get("confidence", 0.7))
-    elif engine == "biqt":
+    elif engine.casefold() == "biqt":
         output = biqt_engine(img_path)
+    elif engine.casefold() == "ofiq":
+        folder_path = img_path  # ofiq takes folder instead of single file
+        output = ofiq_engine(folder_path)
     return output
 
 
@@ -432,3 +437,66 @@ def is_glasses(face_mesh: object, img: np.array) -> dict:
     except Exception as e:
         return {"error": str(e)}
     return {"glasses": True if 255 in center else False}
+
+
+def ofiq_engine(
+    dir_path: str,
+) -> dict:
+    """_summary_
+
+    Args:
+        dir_path (str): _description_
+
+    Returns:
+        dict: _description_
+    """
+    output = {"log": {}}
+
+    output.update({"results": meta.get("results")}) if not (
+        meta := get_ofiq_attr(dir_path)
+    ).get("error") else output["log"].update({"face attributes": meta["error"]})
+
+    if not output["log"]:
+        output.pop("log")
+    return output
+
+
+def get_ofiq_attr(dir_path: str) -> list:
+    try:
+        output = {"results": []}
+        try:
+            with open("ofiq.log", "w") as f:
+                subprocess.run(
+                    [
+                        "./OFIQ/bin/OFIQSampleApp",
+                        "-c",
+                        "./OFIQ/ofiq_config.jaxn",
+                        "-i",
+                        dir_path,
+                        "-o",
+                        "ofiq.csv",
+                    ],
+                    stdout=f,
+                    text=True,
+                )
+        except Exception as e:
+            raise RuntimeError(f"Engine failed: {str(e)}")
+        with open("ofiq.csv") as content:
+            lines = csv.DictReader(content, delimiter=";")
+            for line in lines:
+                line = {
+                    (camel_to_snake(key) if key != "Filename" else "file"): value
+                    for key, value in line.items()
+                }
+                line.pop("")
+                rectified = {
+                    "file": line.pop("file"),
+                    "quality": line.get("unified_quality_score.scalar"),
+                }
+                rectified.update(line)
+                output["results"].append(rectified)
+            if not output["results"]:
+                raise RuntimeError("No output")
+    except Exception as e:
+        return {"error": str(e)}
+    return output
