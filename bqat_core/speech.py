@@ -23,7 +23,8 @@ def process_speech(
         try:
             results, log = get_metrics_batch(input_path)
             output.update({"results": results})
-            output["log"].update({"speech analysis": log})
+            if log:
+                output["log"].update({"speech analysis": log})
             return output
         except Exception as e:
             raise RuntimeError(str(e))
