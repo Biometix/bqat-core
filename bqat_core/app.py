@@ -19,7 +19,7 @@ def scan(file: str, mode: str, **params):
     Returns:
         dict: _description_
     """
-    meta = {"input": file}
+    meta = {"file": file}
     error = []
 
     if mode == "iris":
