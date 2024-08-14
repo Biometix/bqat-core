@@ -1,11 +1,10 @@
-<a name="unreleased"></a>
-# unreleased
+<a name="v1.4.3"></a>
+# v1.4.3 (2024-08-14)
 
-## 📚 Documentation
 
-- Init changelog
-- Update Changlog
+## 🛠 Fixes
 
+- Rebuild OFIQ engine to support single file processing
 
 <a name="v1.4.2"></a>
 # v1.4.2 (2024-05-01)

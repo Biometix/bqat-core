@@ -36,4 +36,5 @@ def extend(suffixes: list):
 
 
 def camel_to_snake(name: str) -> str:
-    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
+    name = re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
+    return re.sub(r"\.", "_", name)

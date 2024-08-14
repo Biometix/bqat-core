@@ -1,5 +1,6 @@
 import csv
 import subprocess
+import time
 from io import StringIO
 
 import cv2 as cv
@@ -14,14 +15,14 @@ from scipy.spatial.distance import euclidean
 from .utils import camel_to_snake
 
 
-def scan_face(img_path: str, engine: str = "bqat", **params) -> dict:
+def scan_face(path: str, engine: str = "bqat", **params) -> dict:
     if engine.casefold() == "bqat":
-        output = default_engine(img_path, params.get("confidence", 0.7))
+        output = default_engine(path, params.get("confidence", 0.7))
     elif engine.casefold() == "biqt":
-        output = biqt_engine(img_path)
+        output = biqt_engine(path)
     elif engine.casefold() == "ofiq":
-        folder_path = img_path  # ofiq takes folder instead of single file
-        output = ofiq_engine(folder_path)
+        dir = True if params.get("type") == "folder" else False
+        output = ofiq_engine(path, dir=dir)
     return output
 
 
@@ -440,7 +441,8 @@ def is_glasses(face_mesh: object, img: np.array) -> dict:
 
 
 def ofiq_engine(
-    dir_path: str,
+    path: str,
+    dir: bool = False,
 ) -> dict:
     """_summary_
 
@@ -452,51 +454,170 @@ def ofiq_engine(
     """
     output = {"log": {}}
 
-    output.update({"results": meta.get("results")}) if not (
-        meta := get_ofiq_attr(dir_path)
-    ).get("error") else output["log"].update({"face attributes": meta["error"]})
+    if dir:
+        output.update({"results": meta.get("results")}) if not (
+            meta := get_ofiq_attr(path, dir=dir)
+        ).get("error") else output["log"].update({"face attributes": meta["error"]})
+    else:
+        output.update(meta) if not (meta := get_ofiq_attr(path, dir=dir)).get(
+            "error"
+        ) else output["log"].update({"face attributes": meta["error"]})
 
     if not output["log"]:
         output.pop("log")
     return output
 
 
-def get_ofiq_attr(dir_path: str) -> list:
+def get_ofiq_attr(path: str, dir: bool = False) -> list:
     try:
-        output = {"results": []}
-        try:
-            with open("ofiq.log", "w") as f:
-                subprocess.run(
+        if dir:
+            output = {"results": []}
+            try:
+                with open("ofiq.log", "w") as f:
+                    subprocess.run(
+                        [
+                            "./OFIQ/bin/OFIQSampleApp",
+                            "-c",
+                            "./OFIQ/ofiq_config.jaxn",
+                            "-i",
+                            path,
+                            "-o",
+                            "ofiq.csv",
+                        ],
+                        stdout=f,
+                        text=True,
+                    )
+            except Exception as e:
+                raise RuntimeError(f"Engine failed: {str(e)}")
+            with open("ofiq.csv") as content:
+                lines = csv.DictReader(content, delimiter=";")
+                for line in lines:
+                    line = {
+                        (camel_to_snake(key) if key != "Filename" else "file"): value
+                        for key, value in line.items()
+                    }
+                    line.pop("")
+                    rectified = {
+                        "file": line.pop("file"),
+                        "quality": line.get("unified_quality_score_scalar"),
+                    }
+                    rectified.update(line)
+                    output["results"].append(rectified)
+                if not output["results"]:
+                    raise RuntimeError("No output")
+        else:
+            output = {}
+            start = time.time()
+            try:
+                raw = subprocess.check_output(
                     [
                         "./OFIQ/bin/OFIQSampleApp",
                         "-c",
                         "./OFIQ/ofiq_config.jaxn",
                         "-i",
-                        dir_path,
-                        "-o",
-                        "ofiq.csv",
-                    ],
-                    stdout=f,
-                    text=True,
+                        path,
+                    ]
                 )
-        except Exception as e:
-            raise RuntimeError(f"Engine failed: {str(e)}")
-        with open("ofiq.csv") as content:
-            lines = csv.DictReader(content, delimiter=";")
-            for line in lines:
-                line = {
-                    (camel_to_snake(key) if key != "Filename" else "file"): value
-                    for key, value in line.items()
-                }
-                line.pop("")
-                rectified = {
-                    "file": line.pop("file"),
-                    "quality": line.get("unified_quality_score.scalar"),
-                }
-                rectified.update(line)
-                output["results"].append(rectified)
-            if not output["results"]:
-                raise RuntimeError("No output")
+            except Exception:
+                raise RuntimeError("Engine failed")
+            end = time.time() - start
+            print(f"{end=}")
+            content = StringIO(raw.decode())
+
+            # OFIQ v1.0.0-rc.1
+            # header = [
+            #     "unified_quality_score",
+            #     "background_uniformity",
+            #     "illumination_uniformity",
+            #     "luminance_mean",
+            #     "luminance_variance",
+            #     "under_exposure_prevention",
+            #     "over_exposure_prevention",
+            #     "dynamic_range",
+            #     "sharpness",
+            #     "compression_artifacts",
+            #     "natural_colour",
+            #     "single_face_present",
+            #     "eyes_open",
+            #     "mouth_closed",
+            #     "eyes_visible",
+            #     "mouth_occlusion_prevention",
+            #     "face_occlusion_prevention",
+            #     "inter_eye_distance",
+            #     "head_size",
+            #     "leftward_crop_of_the_face_image",
+            #     "rightward_crop_of_the_face_image",
+            #     "downward_crop_of_the_face_image",
+            #     "upward_crop_of_the_face_image",
+            #     "head_pose_yaw",
+            #     "head_pose_pitch",
+            #     "head_pose_roll",
+            #     "expression_neutrality",
+            #     "no_head_coverings",
+            #     "unified_quality_score_scalar",
+            #     "background_uniformity_scalar",
+            #     "illumination_uniformity_scalar",
+            #     "luminance_mean_scalar",
+            #     "luminance_variance_scalar",
+            #     "under_exposure_prevention_scalar",
+            #     "over_exposure_prevention_scalar",
+            #     "dynamic_range_scalar",
+            #     "sharpness_scalar",
+            #     "compression_artifacts_scalar",
+            #     "natural_colour_scalar",
+            #     "single_face_present_scalar",
+            #     "eyes_open_scalar",
+            #     "mouth_closed_scalar",
+            #     "eyes_visi# OFIQ v1.0.0-rc.1ble_scalar",
+            #     "mouth_occlusion_prevention_scalar",
+            #     "face_occlusion_prevention_scalar",
+            #     "inter_eye_distance_scalar",
+            #     "head_size_scalar",
+            #     "leftward_crop_of_the_face_image_scalar",
+            #     "rightward_crop_of_the_face_image_scalar",
+            #     "downward_crop_of_the_face_image_scalar",
+            #     "upward_crop_of_the_face_image_scalar",
+            #     "head_pose_yaw_scalar",
+            #     "head_pose_pitch_scalar",
+            #     "head_pose_roll_scalar",
+            #     "expression_neutrality_scalar",
+            #     "no_head_coverings_scalar",
+            # ]
+            # output = next(
+            #     csv.DictReader(
+            #         StringIO(
+            #             list(next(csv.DictReader(content)).values())[0].split(":")[1]
+            #         ),
+            #         delimiter=";",
+            #         fieldnames=header[0:28],
+            #     )
+            # )
+
+            raw = list(csv.DictReader(content))
+            header = [
+                camel_to_snake(item)
+                for item in next(
+                    csv.reader(
+                        StringIO(list(raw[3].values())[0]),
+                        delimiter=";",
+                    )
+                )
+            ][1:]
+            header.pop()
+            raw_scores = list(raw[1].values())[0].split(":")[1]
+            scalar_scores = list(raw[2].values())[0].split(":")[1]
+            output = next(
+                csv.DictReader(
+                    StringIO(raw_scores + ";" + scalar_scores),
+                    delimiter=";",
+                    fieldnames=header,
+                )
+            )
+
+            output = {key: float(value) for key, value in output.items()}
+
+            if not output:
+                raise RuntimeError("Engine failed")
     except Exception as e:
         return {"error": str(e)}
     return output
