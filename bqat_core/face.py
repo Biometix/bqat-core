@@ -1,6 +1,5 @@
 import csv
 import subprocess
-import time
 from io import StringIO
 
 import cv2 as cv
@@ -507,7 +506,6 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                     raise RuntimeError("No output")
         else:
             output = {}
-            start = time.time()
             try:
                 raw = subprocess.check_output(
                     [
@@ -520,8 +518,6 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                 )
             except Exception:
                 raise RuntimeError("Engine failed")
-            end = time.time() - start
-            print(f"{end=}")
             content = StringIO(raw.decode())
 
             # OFIQ v1.0.0-rc.1
