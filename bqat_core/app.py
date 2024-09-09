@@ -33,16 +33,15 @@ def scan(file: str, mode: str, **params):
 
     if mode == "face":
         try:
-            if (engine:=params.get("engine")) == "ofiq":
+            if (params.get("engine")) == "ofiq" and params.get("type") == "folder":
                 return scan_face(
-                    img_path=file,
-                    engine=engine,
+                    path=file,
+                    **params,
                 )
             else:
                 output = scan_face(
-                    img_path=file,
-                    engine=params.get("engine", "bqat"),
-                    confidence=params.get("confidence", 0.7),
+                    path=file,
+                    **params,
                 )
                 meta.update(output)
         except Exception as e:
