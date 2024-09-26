@@ -38,14 +38,19 @@ def default_engine(
     Returns:
         dict: _description_
     """
-    output = {"log": {}}
+    output = {"log": []}
 
     try:
         img = cv.imread(img_path)
         h, w, _ = img.shape
-        output.update({"image_height": h, "image_width": w})
+        output.update(
+            {
+                "image_height": h,
+                "image_width": w,
+            }
+        )
     except Exception as e:
-        output["log"].update({"load image": str(e)})
+        output["log"].append({"load image": str(e)})
         return output
 
     try:
@@ -102,7 +107,7 @@ def default_engine(
             right = bbox["right"] if bbox["right"] < img.shape[1] else img.shape[1]
             target_region = img[upper:lower, left:right]
     except Exception as e:
-        output["log"].update({"face detection": str(e)})
+        output["log"].append({"face detection": str(e)})
         return output
 
     try:
@@ -122,31 +127,34 @@ def default_engine(
             raise RuntimeError("fail to get face mesh")
 
     except Exception as e:
-        output["log"].update({"face mesh": str(e)})
+        output["log"].append({"face mesh": str(e)})
         # return output
 
-    # output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].update({"image quality": meta["error"]})
-    # output.update(meta) if not (meta:=get_attributes(target_region)).get("error") else output["log"].update({"face attributes": meta["error"]})
+    # output.update(meta) if not (meta:=get_img_quality(target_region)).get("error") else output["log"].append({"image quality": meta["error"]})
+    # output.update(meta) if not (meta:=get_attributes(target_region)).get("error") else output["log"].append({"face attributes": meta["error"]})
     output.update(meta) if not (meta := is_smile(target_region)).get(
         "error"
-    ) else output["log"].update({"smile detection": meta["error"]})
+    ) else output["log"].append({"smile detection": meta["error"]})
 
     if face_mesh:
         output.update(meta) if not (meta := is_eye_closed(mesh, target_region)).get(
             "error"
-        ) else output["log"].update({"closed eye detection": meta["error"]})
+        ) else output["log"].append({"closed eye detection": meta["error"]})
         output.update(meta) if not (meta := get_ipd(mesh, target_region)).get(
             "error"
-        ) else output["log"].update({"ipd": meta["error"]})
+        ) else output["log"].append({"ipd": meta["error"]})
         output.update(meta) if not (meta := get_orientation(mesh, target_region)).get(
             "error"
-        ) else output["log"].update({"head pose": meta["error"]})
+        ) else output["log"].append({"head pose": meta["error"]})
         output.update(meta) if not (meta := is_glasses(mesh, target_region)).get(
             "error"
-        ) else output["log"].update({"glasses detection": meta["error"]})
+        ) else output["log"].append({"glasses detection": meta["error"]})
 
-    if not output["log"]:
+    if output.get("log"):
+        output["log"] = output.pop("log")
+    else:
         output.pop("log")
+
     return output
 
 
@@ -165,7 +173,7 @@ def biqt_engine(
 
     output.update(meta) if not (meta := get_biqt_attr(img_path)).get(
         "error"
-    ) else output["log"].update({"face attributes": meta["error"]})
+    ) else output["log"].append({"face attributes": meta["error"]})
 
     if not output["log"]:
         output.pop("log")
@@ -456,11 +464,11 @@ def ofiq_engine(
     if dir:
         output.update({"results": meta.get("results")}) if not (
             meta := get_ofiq_attr(path, dir=dir)
-        ).get("error") else output["log"].update({"face attributes": meta["error"]})
+        ).get("error") else output["log"].append({"face attributes": meta["error"]})
     else:
         output.update(meta) if not (meta := get_ofiq_attr(path, dir=dir)).get(
             "error"
-        ) else output["log"].update({"face attributes": meta["error"]})
+        ) else output["log"].append({"face attributes": meta["error"]})
 
     if not output["log"]:
         output.pop("log")

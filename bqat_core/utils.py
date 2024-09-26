@@ -1,11 +1,12 @@
 import os
 import re
+from pathlib import Path
 
 import wsq
 from PIL import Image, ImageOps
 
 
-def convert(file, source, target, grayscale=False):
+def convert(file, source, target, grayscale=False, directory=None):
     input_type = file.rsplit(".")[-1]
     if input_type == target:
         return file, input_type, target
@@ -16,9 +17,11 @@ def convert(file, source, target, grayscale=False):
         if grayscale:
             img = ImageOps.grayscale(img)
             # img = img.convert("L")
-        converted = os.path.splitext(file)[0] + f".converted.{target}"
+        converted = Path(directory) / f"{os.path.splitext(file)[0]}.{target}"
+        if not converted.parent.exists():
+            converted.parent.mkdir(parents=True, exist_ok=True)
         img.save(converted)
-        output = converted
+        output = str(converted)
     else:
         output = file
     output_type = output.rsplit(".")[-1]
