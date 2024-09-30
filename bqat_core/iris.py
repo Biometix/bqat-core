@@ -19,13 +19,19 @@ def scan_iris(
     Returns:
         dict: _description_
     """
-    output = {"log": {}}
+    output = {"log": []}
 
     try:
         img = cv.imread(img_path)
         h, w, _ = img.shape
+        output.update(
+            {
+                "image_height": h,
+                "image_width": w,
+            }
+        )
     except Exception as e:
-        output["log"].update({"load image": str(e)})
+        output["log"].append({"load image": str(e)})
         return output
 
     try:
@@ -37,34 +43,31 @@ def scan_iris(
             format="png",
         )  # reduce range resolution to improve robustness #17
         if result["resize"]:
-            output["log"].update(
+            output["log"].append(
                 {"resize": f"input resized to ({result['width']}, {result['height']})"}
             )
             img_path = result["path"]
         if result["format"]:
-            output["log"].update(
+            output["log"].append(
                 {"convert": f"input converted to {result['format'].upper()} format"}
             )
             img_path = result["path"]
     except Exception as e:
-        output["log"].update({"preprocess": str(e)})
+        output["log"].append({"preprocess": str(e)})
         return output
 
     output.update(meta) if not (meta := get_attributes(img_path)).get(
         "error"
-    ) else output["log"].update({"iris attributes": meta["error"]})
+    ) else output["log"].append({"iris attributes": meta["error"]})
 
     if result["resize"] or result["convert"]:
         os.remove(img_path)
-        output.update(
-            {
-                "image_height": h,
-                "image_width": w,
-            }
-        )
 
-    if not output["log"]:
+    if output.get("log"):
+        output["log"] = output.pop("log")
+    else:
         output.pop("log")
+
     return output
 
 

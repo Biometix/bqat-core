@@ -4,6 +4,7 @@ from io import StringIO
 
 import numpy as np
 from PIL import Image, ImageOps
+
 from .utils import camel_to_snake
 
 # from scipy.stats import normaltest
@@ -20,7 +21,7 @@ def scan_finger(
     Returns:
         dict: _description_
     """
-    output = {"log": {}}
+    output = {"log": []}
 
     try:
         img = Image.open(img_path)
@@ -32,14 +33,21 @@ def scan_finger(
             }
         )
     except Exception as e:
-        output["log"].update({"load image": str(e)})
+        output["log"].append({"load image": str(e)})
         return output
 
-    output.update(meta) if not (meta:=get_nfiq2(img_path)).get("error") else output["log"].update({"nfiq2": meta["error"]})
-    output.update(meta) if not (meta:=detect_fault(img)).get("error") else output["log"].update({"fault detection": meta["error"]})
+    output.update(meta) if not (meta := get_nfiq2(img_path)).get("error") else output[
+        "log"
+    ].append({"nfiq2": meta["error"]})
+    output.update(meta) if not (meta := detect_fault(img)).get("error") else output[
+        "log"
+    ].append({"fault detection": meta["error"]})
 
-    if not output["log"]:
+    if output.get("log"):
+        output["log"] = output.pop("log")
+    else:
         output.pop("log")
+
     return output
 
 

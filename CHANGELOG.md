@@ -1,18 +1,27 @@
+<a name="v1.4.4"></a>
+# v1.4.4 (2024-09-26)
+
+## 🛠 Fixes
+
+- Fix error log issue
+- Switch to system temporary directory for fingerprint conversion
+
+
 <a name="v1.4.3"></a>
 # v1.4.3 (2024-08-14)
-
 
 ## 🛠 Fixes
 
 - Rebuild OFIQ engine to support single file processing
 
+
 <a name="v1.4.2"></a>
 # v1.4.2 (2024-05-01)
-
 
 ## 🛠 Fixes
 
 - Fix reporting filepath label issue
+
 
 <a name="v1.4.1"></a>
 # v1.4.1 (2024-04-22)
@@ -28,10 +37,10 @@
 ## 🚀 Features
 - Introduce OFIQ engine for face modality (alpha) [#15](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/15)
 
-
 ## 🛠 Fixes
 
 - Iris resize and convert issue
+
 
 <a name="v1.3.6"></a>
 # v1.3.6 (2024-04-04)
@@ -62,9 +71,7 @@
 
 ## 🛠 Fixes
 
-
 - Lower resolution to improve engine robustness [#17](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/17)
-
 
 ## ⚙️ Miscellaneous Tasks
 
@@ -76,7 +83,6 @@
 
 ## ⚙️ Miscellaneous Tasks
 
-
 - Update for refactoring image building configuration
 
 
@@ -84,7 +90,6 @@
 # v1.3.1 (2023-07-28)
 
 ## ⚙️ Miscellaneous Tasks
-
 
 - Cleanup cli log
 

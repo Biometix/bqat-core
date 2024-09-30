@@ -10,29 +10,32 @@ def process_speech(
     input_path: str,
     input_type: str,
 ):
-    output = {"log": {}}
+    output = {"log": []}
 
     if input_type == "file":
         output.update(meta) if not (meta := get_metrics_transmitted(input_path)).get(
             "error"
-        ) else output["log"].update({"transmitted speech analysis": meta["error"]})
+        ) else output["log"].append({"transmitted speech analysis": meta["error"]})
         output.update(meta) if not (meta := get_metrics_synthesized(input_path)).get(
             "error"
-        ) else output["log"].update({"synthesized speech analysis": meta["error"]})
+        ) else output["log"].append({"synthesized speech analysis": meta["error"]})
     elif input_type == "folder":
         try:
             results, log = get_metrics_batch(input_path)
             output.update({"results": results})
             if log:
-                output["log"].update({"speech analysis": log})
+                output["log"].append({"speech analysis": log})
             return output
         except Exception as e:
             raise RuntimeError(str(e))
     else:
         raise TypeError("illegal task type")
 
-    if not output["log"]:
+    if output.get("log"):
+        output["log"] = output.pop("log")
+    else:
         output.pop("log")
+
     return output
 
 
@@ -109,25 +112,23 @@ def get_metrics_synthesized(file_path: str) -> dict:
 def get_metrics_batch(folder: str) -> tuple:
     output = []
     error = []
-    try:
-        synthesized = get_metrics_synthesized_batch(folder)
-    except Exception as e:
-        error.append({"synthesized analysis": str(e)})
-        synthesized = False
-    try:
-        transmitted = get_metrics_transmitted_batch(folder)
-    except Exception as e:
-        error.append({"transmitted analysis": str(e)})
-        transmitted = False
 
-    if synthesized is not False and transmitted is not False:
+    synthesized, e = get_metrics_synthesized_batch(folder)
+    if e:
+        msg = {"synthesized analysis": e}
+        print(f">> {folder}: {msg = }")
+        error.append(msg)
+
+    transmitted, e = get_metrics_transmitted_batch(folder)
+    if e:
+        msg = {"transmitted analysis": e}
+        print(f">> {folder}: {msg = }")
+        error.append(msg)
+
+    try:
         combined = synthesized.merge(transmitted)
         output = combined.to_dict("records")
-    elif synthesized is not False and transmitted is False:
-        output = synthesized.to_dict("records")
-    elif synthesized is False and transmitted is not False:
-        output = transmitted.to_dict("records")
-    else:
+    except Exception as e:
         raise RuntimeError(json.dumps({"speech analysis failed": error}))
 
     return output, error
@@ -153,21 +154,19 @@ def get_metrics_synthesized_batch(folder: str) -> pd.DataFrame:
         ],
         capture_output=True,
     )
-    if not raw.stderr:
-        content = StringIO(raw.stdout.decode())
-        metrics_synthesized = pd.read_csv(content, header=1)
-        metrics_synthesized.rename(
-            columns={
-                "deg": "file",
-                "mos_pred": "naturalness",
-            },
-            inplace=True,
-        )
-        metrics_synthesized.drop(columns=["model"], inplace=True)
+    error = raw.stderr.decode()
+    content = StringIO(raw.stdout.decode())
+    outputs = pd.read_csv(content, header=1)
+    outputs.rename(
+        columns={
+            "deg": "file",
+            "mos_pred": "naturalness",
+        },
+        inplace=True,
+    )
+    outputs.drop(columns=["model"], inplace=True)
 
-        return metrics_synthesized
-    else:
-        raise RuntimeError(raw.stderr.decode())
+    return outputs, error
 
 
 def get_metrics_transmitted_batch(folder: str) -> pd.DataFrame:
@@ -190,22 +189,20 @@ def get_metrics_transmitted_batch(folder: str) -> pd.DataFrame:
         ],
         capture_output=True,
     )
-    if not raw.stderr:
-        content = StringIO(raw.stdout.decode())
-        metrics_transmitted = pd.read_csv(content, header=1)
-        metrics_transmitted.rename(
-            columns={
-                "deg": "file",
-                "mos_pred": "quality",
-                "noi_pred": "noisiness",
-                "dis_pred": "discontinuity",
-                "col_pred": "coloration",
-                "loud_pred": "loudness",
-            },
-            inplace=True,
-        )
-        metrics_transmitted.drop(columns=["model"], inplace=True)
+    error = raw.stderr.decode()
+    content = StringIO(raw.stdout.decode())
+    outputs = pd.read_csv(content, header=1)
+    outputs.rename(
+        columns={
+            "deg": "file",
+            "mos_pred": "quality",
+            "noi_pred": "noisiness",
+            "dis_pred": "discontinuity",
+            "col_pred": "coloration",
+            "loud_pred": "loudness",
+        },
+        inplace=True,
+    )
+    outputs.drop(columns=["model"], inplace=True)
 
-        return metrics_transmitted
-    else:
-        raise RuntimeError(raw.stderr.decode())
+    return outputs, error
