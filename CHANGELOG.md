@@ -1,3 +1,12 @@
+<a name="v1.4.5"></a>
+# v1.4.5 (2024-10-09)
+
+## 🛠 Fixes
+
+- Fix OFIQ face engine folder mode output vaule type issue
+- Switch to system temporary directory for OFIQ folder mode
+
+
 <a name="v1.4.4"></a>
 # v1.4.4 (2024-09-26)
 

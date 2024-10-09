@@ -1,6 +1,9 @@
 import csv
 import subprocess
+import tempfile
 from io import StringIO
+from pathlib import Path
+from uuid import uuid4
 
 import cv2 as cv
 import numpy as np
@@ -11,7 +14,7 @@ from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
 from scipy.spatial.distance import euclidean
 
-from .utils import camel_to_snake
+from .utils import camel_to_snake, convert_values_to_number
 
 
 def scan_face(path: str, engine: str = "bqat", **params) -> dict:
@@ -478,40 +481,45 @@ def ofiq_engine(
 def get_ofiq_attr(path: str, dir: bool = False) -> list:
     try:
         if dir:
-            output = {"results": []}
-            try:
-                with open("ofiq.log", "w") as f:
-                    subprocess.run(
-                        [
-                            "./OFIQ/bin/OFIQSampleApp",
-                            "-c",
-                            "./OFIQ/ofiq_config.jaxn",
-                            "-i",
-                            path,
-                            "-o",
-                            "ofiq.csv",
-                        ],
-                        stdout=f,
-                        text=True,
-                    )
-            except Exception as e:
-                raise RuntimeError(f"Engine failed: {str(e)}")
-            with open("ofiq.csv") as content:
-                lines = csv.DictReader(content, delimiter=";")
-                for line in lines:
-                    line = {
-                        (camel_to_snake(key) if key != "Filename" else "file"): value
-                        for key, value in line.items()
-                    }
-                    line.pop("")
-                    rectified = {
-                        "file": line.pop("file"),
-                        "quality": line.get("unified_quality_score_scalar"),
-                    }
-                    rectified.update(line)
-                    output["results"].append(rectified)
-                if not output["results"]:
-                    raise RuntimeError("No output")
+            with tempfile.TemporaryDirectory() as tmpdir:
+                temp_output = Path(tmpdir) / f"{uuid4()}.csv"
+                temp_log = Path(tmpdir) / f"{uuid4()}.log"
+                output = {"results": []}
+                try:
+                    with open(temp_log, "w") as f:
+                        subprocess.run(
+                            [
+                                "./OFIQ/bin/OFIQSampleApp",
+                                "-c",
+                                "./OFIQ/ofiq_config.jaxn",
+                                "-i",
+                                path,
+                                "-o",
+                                temp_output,
+                            ],
+                            stdout=f,
+                            text=True,
+                        )
+                except Exception as e:
+                    raise RuntimeError(f"Engine failed: {str(e)}")
+                with open(temp_output) as content:
+                    lines = csv.DictReader(content, delimiter=";")
+                    for line in lines:
+                        line = {
+                            (
+                                camel_to_snake(key) if key != "Filename" else "file"
+                            ): value
+                            for key, value in line.items()
+                        }
+                        line.pop("")
+                        rectified = {
+                            "file": line.pop("file"),
+                            # "quality": line.get("unified_quality_score_scalar"),
+                        }
+                        rectified.update(line)
+                        output["results"].append(convert_values_to_number(rectified))
+                    if not output["results"]:
+                        raise RuntimeError("No output")
         else:
             output = {}
             try:

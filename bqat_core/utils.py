@@ -1,3 +1,4 @@
+import math
 import os
 import re
 from pathlib import Path
@@ -41,3 +42,17 @@ def extend(suffixes: list):
 def camel_to_snake(name: str) -> str:
     name = re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
     return re.sub(r"\.", "_", name)
+
+
+def convert_values_to_number(d) -> dict[str, int | float | str | bool]:
+    def try_convert(value) -> int | float | str | bool:
+        try:
+            return int(value)
+        except ValueError:
+            try:
+                f = float(value)
+                return f if not math.isnan(f) else None
+            except Exception:
+                return value
+
+    return {k: try_convert(v) for k, v in d.items()}

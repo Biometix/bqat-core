@@ -126,7 +126,7 @@ def get_metrics_batch(folder: str) -> tuple:
         error.append(msg)
 
     try:
-        combined = synthesized.merge(transmitted)
+        combined = transmitted.merge(synthesized)
         output = combined.to_dict("records")
     except Exception as e:
         raise RuntimeError(json.dumps({"speech analysis failed": error}))
