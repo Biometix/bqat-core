@@ -52,7 +52,7 @@ def convert_values_to_number(d) -> dict[str, int | float | str | bool]:
             try:
                 f = float(value)
                 return f if not math.isnan(f) else None
-            except ValueError | Exception:
+            except Exception:
                 return value
 
     return {k: try_convert(v) for k, v in d.items()}
