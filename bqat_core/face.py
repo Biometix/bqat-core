@@ -1,30 +1,49 @@
 import csv
+import multiprocessing
 import subprocess
 import tempfile
+import traceback
 from io import StringIO
 from pathlib import Path
 from uuid import uuid4
 
 import cv2 as cv
 import numpy as np
+from mediapipe import Image, ImageFormat
 
 # import imquality.brisque as bk
 # from deepface import DeepFace as df
 from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
+from mediapipe.tasks.python import BaseOptions
+from mediapipe.tasks.python.vision import (
+    ImageSegmenter,
+    ImageSegmenterOptions,
+    RunningMode,
+)
 from scipy.spatial.distance import euclidean
+from skimage import measure
+from sklearn.cluster import KMeans
 
-from .utils import camel_to_snake, convert_values_to_number
+from .utils import (
+    camel_to_snake,
+    convert_values_to_number,
+    get_color_name,
+)
 
 
 def scan_face(path: str, engine: str = "bqat", **params) -> dict:
-    if engine.casefold() == "bqat":
-        output = default_engine(path, params.get("confidence", 0.7))
-    elif engine.casefold() == "biqt":
-        output = biqt_engine(path)
-    elif engine.casefold() == "ofiq":
-        dir = True if params.get("type") == "folder" else False
-        output = ofiq_engine(path, dir=dir)
+    match engine.casefold():
+        case "bqat":
+            output = default_engine(path, params.get("confidence", 0.7))
+        case "biqt":
+            output = biqt_engine(path)
+        case "ofiq":
+            # dir = True if params.get("type") == "folder" else False
+            # output = ofiq_engine(path, dir=dir)
+            output = ofiq_engine(path, dir=True)
+        case "fusion":
+            output = fusion_engine(path, params.get("fusion", 6))
     return output
 
 
@@ -53,6 +72,7 @@ def default_engine(
             }
         )
     except Exception as e:
+        traceback.print_exception(e)
         output["log"].append({"load image": str(e)})
         return output
 
@@ -93,7 +113,7 @@ def default_engine(
                 "right": int(w + x),
                 "lower": int(h + y),
             }
-            output.update({"confidence": detection.score[0]})
+            output.update({"face_detection": detection.score[0]})
             output.update(
                 {
                     "bbox_left": bbox["left"],
@@ -110,6 +130,7 @@ def default_engine(
             right = bbox["right"] if bbox["right"] < img.shape[1] else img.shape[1]
             target_region = img[upper:lower, left:right]
     except Exception as e:
+        traceback.print_exception(e)
         output["log"].append({"face detection": str(e)})
         return output
 
@@ -129,7 +150,10 @@ def default_engine(
             face_mesh = False
             raise RuntimeError("fail to get face mesh")
 
+    except RuntimeError as e:
+        output["log"].append({"face mesh": str(e)})
     except Exception as e:
+        traceback.print_exception(e)
         output["log"].append({"face mesh": str(e)})
         # return output
 
@@ -138,12 +162,30 @@ def default_engine(
     output.update(meta) if not (meta := is_smile(target_region)).get(
         "error"
     ) else output["log"].append({"smile detection": meta["error"]})
+    # output.update(meta) if not (meta := get_offset(output)).get("error") else output[
+    #     "log"
+    # ].append({"offset detection": meta["error"]})
+    output.update(meta) if not (meta := get_face_ratio(output)).get(
+        "error"
+    ) else output["log"].append({"face ratio": meta["error"]})
+    output.update(meta) if not (meta := get_image_meta(img)).get("error") else output[
+        "log"
+    ].append({"image metadata": meta["error"]})
+    # output.update(meta) if not (meta := get_background_color(img)).get(
+    #     "error"
+    # ) else output["log"].append({"image background": meta["error"]})
+    # output.update(meta) if not (meta := get_hair_cover(img, output)).get(
+    #     "error"
+    # ) else output["log"].append({"hair coverage": meta["error"]})
+    # output.update(meta) if not (meta := is_blurry(img)).get("error") else output[
+    #     "log"
+    # ].append({"image blurriness": meta["error"]})
 
     if face_mesh:
         output.update(meta) if not (meta := is_eye_closed(mesh, target_region)).get(
             "error"
         ) else output["log"].append({"closed eye detection": meta["error"]})
-        output.update(meta) if not (meta := get_ipd(mesh, target_region)).get(
+        output.update(meta) if not (meta := get_ipd(mesh, output)).get(
             "error"
         ) else output["log"].append({"ipd": meta["error"]})
         output.update(meta) if not (meta := get_orientation(mesh, target_region)).get(
@@ -152,11 +194,24 @@ def default_engine(
         output.update(meta) if not (meta := is_glasses(mesh, target_region)).get(
             "error"
         ) else output["log"].append({"glasses detection": meta["error"]})
+        output.update(meta) if not (meta := get_offset(mesh, output)).get(
+            "error"
+        ) else output["log"].append({"offset detection": meta["error"]})
+        # output.update(meta) if not (meta := get_gaze_degree(mesh)).get(
+        #     "error"
+        # ) else output["log"].append({"gaze direction": meta["error"]})
+        # output.update(meta) if not (
+        #     meta := get_pupil_color(mesh, target_region, output)
+        # ).get("error") else output["log"].append(
+        #     {"pupil color detection": meta["error"]}
+        # )
 
     if output.get("log"):
         output["log"] = output.pop("log")
     else:
         output.pop("log")
+
+    output["file"] = img_path
 
     return output
 
@@ -180,6 +235,9 @@ def biqt_engine(
 
     if not output["log"]:
         output.pop("log")
+
+    output["file"] = img_path
+
     return output
 
 
@@ -198,6 +256,7 @@ def get_biqt_attr(img_path: str) -> dict:
             raise RuntimeError("Engine failed")
         output["quality"] *= 10  # Observe ISO/IEC 29794-1
     except Exception as e:
+        traceback.print_exception(e)
         return {"error": str(e)}
     return output
 
@@ -208,6 +267,7 @@ def get_biqt_attr(img_path: str) -> dict:
 #         #     img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
 #         image_quality = bk.score(img)
 #     except Exception as e:
+#         traceback.print_exception(e)
 #         return {"error": str(e)}
 #     return {"quality": image_quality}
 
@@ -229,6 +289,7 @@ def get_biqt_attr(img_path: str) -> dict:
 #             # prog_bar=False,
 #         )
 #     except Exception as e:
+#         traceback.print_exception(e)
 #         return {"error": str(e)}
 #     return {
 #         "age": face_attributes["age"],
@@ -252,6 +313,7 @@ def is_smile(img: np.array) -> dict:
         )
         smile = True if len(smile) >= 1 else False
     except Exception as e:
+        traceback.print_exception(e)
         return {"error": str(e)}
     return {"smile": smile}
 
@@ -296,6 +358,7 @@ def is_eye_closed(face_mesh: object, img: np.array) -> dict:
         right = True if right_ratio < threshold else False
         left = True if left_ratio < threshold else False
     except Exception as e:
+        traceback.print_exception(e)
         return {"error": str(e)}
     return {
         "eye_closed_left": left,
@@ -303,11 +366,10 @@ def is_eye_closed(face_mesh: object, img: np.array) -> dict:
     }
 
 
-def get_ipd(face_mesh: object, img: np.array) -> dict:
+def get_ipd(face_mesh: object, output: dict) -> dict:
     try:
-        img_h, img_w, _ = img.shape
-        right_iris = [469, 470, 471, 472]
-        left_iris = [474, 475, 476, 477]
+        right_iris = [474, 475, 476, 477]
+        left_iris = [469, 470, 471, 472]
 
         r_x, r_y, l_x, l_y = [0] * 4
         r_x = np.mean(
@@ -324,19 +386,38 @@ def get_ipd(face_mesh: object, img: np.array) -> dict:
             [lm.y for i, lm in enumerate(face_mesh.landmark) if i in left_iris]
         )
 
-        r = (int(r_x * img_w), int(r_y * img_h))
-        l = (int(l_x * img_w), int(l_y * img_h))
+        pupil_r = (
+            int(
+                (r_x * (output["bbox_right"] - output["bbox_left"]))
+                + output["bbox_left"]
+            ),
+            int(
+                (r_y * (output["bbox_lower"] - output["bbox_upper"]))
+                + output["bbox_upper"]
+            ),
+        )
+        pupil_l = (
+            int(
+                (l_x * (output["bbox_right"] - output["bbox_left"]))
+                + output["bbox_left"]
+            ),
+            int(
+                (l_y * (output["bbox_lower"] - output["bbox_upper"]))
+                + output["bbox_upper"]
+            ),
+        )
         dist = 0
-        for u, v in zip(r, l):
+        for u, v in zip(pupil_r, pupil_l):
             dist += (u - v) ** 2
     except Exception as e:
+        traceback.print_exception(e)
         return {"error": str(e)}
     return {
         "ipd": int(dist**0.5),
-        "pupil_right_x": r[0],
-        "pupil_right_y": r[1],
-        "pupil_left_x": l[0],
-        "pupil_left_y": l[1],
+        "pupil_right_x": pupil_r[0],
+        "pupil_right_y": pupil_r[1],
+        "pupil_left_x": pupil_l[0],
+        "pupil_left_y": pupil_l[1],
     }
 
 
@@ -395,18 +476,19 @@ def get_orientation(face_mesh: object, img: np.array) -> dict:
             raise RuntimeError("unable to get head pose angles.")
 
         if abs(degree_yaw) < 3:
-            pose_yaw = "Forward"
+            pose_yaw = "forward"
         else:
-            pose_yaw = "Left" if degree_yaw > 0 else "Right"
+            pose_yaw = "left" if degree_yaw > 0 else "right"
         if abs(degree_pitch) < 3:
-            pose_pitch = "Level"
+            pose_pitch = "level"
         else:
-            pose_pitch = "Up" if degree_pitch > 0 else "Down"
+            pose_pitch = "up" if degree_pitch > 0 else "down"
         if abs(degree_roll) < 3:
-            pose_roll = "Level"
+            pose_roll = "level"
         else:
-            pose_roll = "Anti-clockwise" if degree_roll > 0 else "Clockwise"
+            pose_roll = "anti-clockwise" if degree_roll > 0 else "clockwise"
     except Exception as e:
+        traceback.print_exception(e)
         return {"error": str(e)}
     return {
         "yaw_pose": pose_yaw,
@@ -446,6 +528,7 @@ def is_glasses(face_mesh: object, img: np.array) -> dict:
         center = eg.T[(int(len(eg.T) / 2))]
 
     except Exception as e:
+        traceback.print_exception(e)
         return {"error": str(e)}
     return {"glasses": True if 255 in center else False}
 
@@ -501,6 +584,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                             text=True,
                         )
                 except Exception as e:
+                    traceback.print_exception(e)
                     raise RuntimeError(f"Engine failed: {str(e)}")
                 with open(temp_output) as content:
                     lines = csv.DictReader(content, delimiter=";")
@@ -631,5 +715,501 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
             if not output:
                 raise RuntimeError("Engine failed")
     except Exception as e:
+        traceback.print_exception(e)
         return {"error": str(e)}
     return output
+
+
+# def get_offset(output: dict) -> dict:
+#     # Use face area bouding box to calculate face offset
+#     try:
+#         return {
+#             "face_offset_x": (
+#                 (output["image_width"] - (output["bbox_right"] - output["bbox_left"]))
+#                 / 2
+#                 - (output["image_width"] - output["bbox_right"])
+#             )
+#             / output["image_width"],
+#             "face_offset_y": (
+#                 (output["image_height"] - (output["bbox_lower"] - output["bbox_upper"]))
+#                 / 2
+#                 - (output["image_height"] - output["bbox_lower"])
+#             )
+#             / output["image_height"],
+#         }
+#     except Exception as e:
+#         traceback.print_exception(e)
+#         return {"error": str(e)}
+
+
+def get_offset(face_mesh: object, output: dict) -> dict:
+    # Use face mask geometrical centre to calculate face offset
+    try:
+        img_h, img_w = output["image_height"], output["image_width"]
+        centre = [6]
+
+        centre_x = img_w / 2
+        centre_y = img_h / 2
+
+        for i, lm in enumerate(face_mesh.landmark):
+            if i in centre:
+                centre_x = (
+                    lm.x * (output["bbox_right"] - output["bbox_left"])
+                    + output["bbox_left"]
+                )
+                centre_y = (
+                    lm.y * (output["bbox_lower"] - output["bbox_upper"])
+                ) + output["bbox_upper"]
+                break
+
+        offset_x = (centre_x - img_w / 2) / img_w
+        offset_y = (centre_y - img_h / 2) / img_h
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+    return {
+        "face_offset_x": offset_x,
+        "face_offset_y": offset_y,
+    }
+
+
+def get_face_ratio(output: dict) -> dict:
+    try:
+        return {
+            "face_ratio": (output["bbox_right"] - output["bbox_left"])
+            * (output["bbox_lower"] - output["bbox_upper"])
+            / (output["image_width"] * output["image_height"])
+        }
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+
+
+def get_gaze_degree(face_mesh: object) -> dict:
+    try:
+        right_pupil_centre = 473
+        right_eye_right = 263
+        right_eye_left = 362
+        right_eye_top = 386
+        right_eye_bottom = 374
+        left_pupil_centre = 468
+        left_eye_right = 133
+        left_eye_left = 33
+        left_eye_top = 159
+        left_eye_bottom = 145
+
+        landmarks = {index: lm for index, lm in enumerate(face_mesh.landmark)}
+
+        rpc = (landmarks[right_pupil_centre].x, landmarks[right_pupil_centre].y)
+        rer = (landmarks[right_eye_right].x, landmarks[right_eye_right].y)
+        rel = (landmarks[right_eye_left].x, landmarks[right_eye_left].y)
+        ret = (landmarks[right_eye_top].x, landmarks[right_eye_top].y)
+        reb = (landmarks[right_eye_bottom].x, landmarks[right_eye_bottom].y)
+        lpc = (landmarks[left_pupil_centre].x, landmarks[left_pupil_centre].y)
+        ler = (landmarks[left_eye_right].x, landmarks[left_eye_right].y)
+        lel = (landmarks[left_eye_left].x, landmarks[left_eye_left].y)
+        let = (landmarks[left_eye_top].x, landmarks[left_eye_top].y)
+        leb = (landmarks[left_eye_bottom].x, landmarks[left_eye_bottom].y)
+
+        gaze_right_x = (rpc[0] - ((rer[0] + rel[0]) / 2)) / (rer[0] - rel[0])
+        gaze_right_y = (rpc[1] - ((ret[1] + reb[1]) / 2)) / (reb[1] - ret[1])
+        gaze_left_x = (lpc[0] - ((ler[0] + lel[0]) / 2)) / (ler[0] - lel[0])
+        gaze_left_y = (lpc[1] - ((let[1] + leb[1]) / 2)) / (leb[1] - let[1])
+
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+    return {
+        "gaze_right_x": gaze_right_x,
+        "gaze_right_y": gaze_right_y,
+        "gaze_left_x": gaze_left_x,
+        "gaze_left_y": gaze_left_y,
+    }
+
+
+def get_pupil_color(face_mesh: object, img: np.array, output: dict) -> dict:
+    try:
+        right_pupil_centre = 473
+        right_pupil_right = 474
+        right_pupil_top = 475
+        right_pupil_left = 476
+        right_pupil_bottom = 477
+        left_pupil_centre = 468
+        left_pupil_right = 469
+        left_pupil_top = 470
+        left_pupil_left = 471
+        left_pupil_bottom = 472
+
+        landmarks = {index: lm for index, lm in enumerate(face_mesh.landmark)}
+
+        rpc = (landmarks[right_pupil_centre].x, landmarks[right_pupil_centre].y)
+        rpr = (landmarks[right_pupil_right].x, landmarks[right_pupil_right].y)
+        rpt = (landmarks[right_pupil_top].x, landmarks[right_pupil_top].y)
+        rpl = (landmarks[right_pupil_left].x, landmarks[right_pupil_left].y)
+        rpb = (landmarks[right_pupil_bottom].x, landmarks[right_pupil_bottom].y)
+        lpc = (landmarks[left_pupil_centre].x, landmarks[left_pupil_centre].y)
+        lpr = (landmarks[left_pupil_right].x, landmarks[left_pupil_right].y)
+        lpt = (landmarks[left_pupil_top].x, landmarks[left_pupil_top].y)
+        lpl = (landmarks[left_pupil_left].x, landmarks[left_pupil_left].y)
+        lpb = (landmarks[left_pupil_bottom].x, landmarks[left_pupil_bottom].y)
+
+        def get_color(pc, pr, pt, pl, pb) -> str:
+            top = int(
+                (pc[1] + pt[1]) / 2 * (output["bbox_lower"] - output["bbox_upper"])
+            )
+            bottom = int(
+                (pc[1] + pb[1]) / 2 * (output["bbox_lower"] - output["bbox_upper"])
+            )
+            right = int(
+                (pc[0] + pr[0]) / 2 * (output["bbox_right"] - output["bbox_left"])
+            )
+            left = int(
+                (pc[0] + pl[0]) / 2 * (output["bbox_right"] - output["bbox_left"])
+            )
+
+            if (pupil := img[top:bottom, left:right]).any():
+                pupil = cv.cvtColor(pupil, cv.COLOR_BGR2RGB)
+            else:
+                raise RuntimeError("fail to crop pupil area")
+
+            # Reshape the image to be a list of pixels
+            pixels = pupil.reshape(-1, 3)
+
+            # Handle low resolution images (will intriduce warning for duplicate pixels)
+            if len(pixels) < 10:
+                pixels = np.repeat(pixels, 3, axis=0)
+                n_clusters = 1
+            else:
+                n_clusters = 3
+
+            # Use KMeans to find the most common colors
+            kmeans = KMeans(n_clusters=n_clusters)
+            kmeans.fit(pixels)
+
+            # Get the cluster centers
+            centers = kmeans.cluster_centers_
+
+            # Calculate the size of each cluster
+            _, counts = np.unique(kmeans.labels_, return_counts=True)
+
+            # Find the largest cluster
+            largest_cluster_index = np.argmax(counts)
+
+            # Get the largest cluster center
+            largest_center = centers[largest_cluster_index]
+            dominant_color = tuple(map(int, largest_center))
+
+            return get_color_name(dominant_color), dominant_color
+
+        pupil_color_right, pupil_right_rgb = get_color(rpc, rpr, rpt, rpl, rpb)
+        pupil_color_left, pupil_left_rgb = get_color(lpc, lpr, lpt, lpl, lpb)
+
+    except RuntimeError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+    return {
+        "pupil_colour_right_name": pupil_color_right,
+        "pupil_colour_right_rgb": pupil_right_rgb,
+        "pupil_colour_left_name": pupil_color_left,
+        "pupil_colour_left_rgb": pupil_left_rgb,
+    }
+
+
+def get_image_meta(img: np.array) -> dict:
+    try:
+        gray_image = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        brightness = np.mean(gray_image)
+        laplacian = cv.Laplacian(gray_image, cv.CV_64F)
+        variance = np.var(laplacian)
+        # luminance = np.mean(
+        #     0.299 * img[:, :, 2] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 0]
+        # )
+        sorted_array = np.sort(gray_image.flatten())
+        num_elements = int(0.01 * len(sorted_array))
+        min_val = np.mean(sorted_array[:num_elements])
+        max_val = np.mean(sorted_array[-num_elements:])
+        dynamic_range = max_val - min_val
+        contrast = np.std(img)
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+    return {
+        "brightness": float(brightness),
+        "dynamic_range": float(dynamic_range),
+        "sharpness": float(variance),
+        # "luminance": float(luminance),
+        "contrast": contrast,
+    }
+
+
+def get_background_color(img: np.array) -> dict:
+    try:
+        # Create a image segmenter instance with the image mode:
+        options = ImageSegmenterOptions(
+            base_options=BaseOptions(
+                model_asset_path="bqat_core/misc/BQAT/selfie_segmenter.tflite"
+            ),
+            running_mode=RunningMode.IMAGE,
+            output_category_mask=True,
+        )
+
+        # Load the input image from a numpy array.
+        mp_image = Image(image_format=ImageFormat.SRGB, data=img)
+
+        with ImageSegmenter.create_from_options(options) as segmenter:
+            segmented_masks = segmenter.segment(mp_image)
+
+        image_data = cv.cvtColor(mp_image.numpy_view(), cv.COLOR_BGR2RGB)
+
+        condition = (
+            np.stack((segmented_masks.category_mask.numpy_view(),) * 3, axis=-1) > 0.2
+        )
+
+        # # Generate output with transparent foreground
+        # fg_image = np.zeros(
+        #     (
+        #         image_data.shape[0],
+        #         image_data.shape[1],
+        #         4,
+        #     ),
+        #     dtype=np.uint8,
+        # )
+        # rgba_image = np.concatenate(
+        #     (
+        #         image_data,
+        #         np.ones(
+        #             (
+        #                 image_data.shape[0],
+        #                 image_data.shape[1],
+        #                 1,
+        #             ),
+        #             dtype=np.uint8,
+        #         )
+        #         * 255,
+        #     ),
+        #     axis=2,
+        # )
+        # output_image = np.where(condition, rgba_image, fg_image)
+
+        # Generate output without foreground
+        fg_image = np.full(
+            (
+                image_data.shape[0],
+                image_data.shape[1],
+                3,
+            ),
+            111,
+            dtype=np.uint8,
+        )
+        output_image = np.where(condition, image_data, fg_image)
+
+        # Reshape the image to be a list of pixels
+        pixels = output_image.reshape(-1, 3)
+
+        # Remove foreground pixels
+        if not (pixels := pixels[~(np.all(pixels == [111, 111, 111], axis=1))]).any():
+            raise RuntimeError("fail to get background image.")
+
+        # Use KMeans to find the most common colors
+        kmeans = KMeans(n_clusters=3)
+        kmeans.fit(pixels)
+
+        # Get the cluster centers
+        centers = kmeans.cluster_centers_
+
+        # Calculate the size of each cluster
+        _, counts = np.unique(kmeans.labels_, return_counts=True)
+
+        # Find the largest cluster
+        largest_cluster_index = np.argmax(counts)
+
+        # Get the largest cluster center
+        largest_center = centers[largest_cluster_index]
+        dominant_color = tuple(map(int, largest_center))
+
+        background_color = get_color_name(dominant_color)
+
+        # Calculate the standard deviation of the R, G, and B channels separately
+        output_image = cv.GaussianBlur(output_image, (5, 5), 0)
+
+        r_std = np.std(output_image[:, :, 0])
+        g_std = np.std(output_image[:, :, 1])
+        b_std = np.std(output_image[:, :, 2])
+
+        # Calculate overall average color standard deviation
+        background_uniformity = (r_std + g_std + b_std) / 3
+
+    except RuntimeError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+    return {
+        "background_color_name": background_color,
+        "background_color_rgb": dominant_color,
+        "background_uniformity": background_uniformity,
+    }
+
+
+def get_hair_cover(img: np.array, output: dict) -> dict:
+    try:
+        # Create a image segmenter instance with the image mode:
+        options = ImageSegmenterOptions(
+            base_options=BaseOptions(
+                model_asset_path="bqat_core/misc/BQAT/hair_segmenter.tflite",
+            ),
+            running_mode=RunningMode.IMAGE,
+            output_category_mask=True,
+        )
+
+        # Load the input image from a numpy array.
+        mp_image = Image(image_format=ImageFormat.SRGB, data=img)
+
+        with ImageSegmenter.create_from_options(options) as segmenter:
+            segmented_masks = segmenter.segment(mp_image)
+
+        image_data = cv.cvtColor(mp_image.numpy_view(), cv.COLOR_BGR2RGB)
+
+        condition = (
+            np.stack(
+                (segmented_masks.category_mask.numpy_view(),) * 3,
+                axis=-1,
+            )
+            > 0.2
+        )
+
+        # Pure black background
+        bg_image = np.full(
+            (
+                image_data.shape[0],
+                image_data.shape[1],
+                3,
+            ),
+            0,
+            dtype=np.uint8,
+        )
+        # Pure white foreground
+        fg_image = np.full(
+            (
+                image_data.shape[0],
+                image_data.shape[1],
+                3,
+            ),
+            255,
+            dtype=np.uint8,
+        )
+        # Mask hair area
+        hair_area_image = np.where(condition, fg_image, bg_image)
+
+        # Mask face area
+        cv.rectangle(
+            bg_image,
+            (
+                output.get("bbox_left"),
+                output.get("bbox_upper"),
+            ),
+            (
+                output.get("bbox_right"),
+                output.get("bbox_lower"),
+            ),
+            (255, 255, 255),
+            -1,
+        )
+
+        face_area_hsv = cv.cvtColor(bg_image, cv.COLOR_BGR2HSV)
+        hair_area_image_hsv = cv.cvtColor(hair_area_image, cv.COLOR_BGR2HSV)
+
+        mask_face = cv.inRange(
+            face_area_hsv, np.array([0, 0, 100]), np.array([0, 0, 255])
+        )
+        mask_hair = cv.inRange(
+            hair_area_image_hsv, np.array([0, 0, 100]), np.array([0, 0, 255])
+        )
+
+        # Find intersection of the two masks
+        intersection = cv.bitwise_and(mask_face, mask_hair)
+        covered_area = cv.countNonZero(intersection)
+
+        # Face area
+        face_area = (output.get("bbox_right") - output.get("bbox_left")) * (
+            output.get("bbox_lower") - output.get("bbox_upper")
+        )
+
+        overlap = covered_area / face_area if face_area > 0 else 0
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+    return {
+        "hair_coverage": overlap,
+    }
+
+
+def is_blurry(img: np.array) -> dict:
+    try:
+        gs = cv.cvtColor(img.copy(), cv.COLOR_BGR2GRAY)
+        blur_metric = measure.blur_effect(gs, h_size=15)
+        lap = cv.Laplacian(gs, cv.CV_64F)
+    except Exception as e:
+        return {"error": str(e)}
+    return {
+        "blur_lap_var": lap.var(),
+        "blurriness": blur_metric,
+    }
+
+
+def fusion_engine(path: str, fusion_code: int = 6):
+    def process_images(engine_func, path, pool):
+        results = {}
+        for result in pool.map(
+            engine_func, [p.as_posix() for p in Path(path).rglob("*")]
+        ):
+            results[result["file"]] = result
+        return results
+
+    with multiprocessing.Pool(
+        processes=(
+            int(multiprocessing.cpu_count() * 0.7)
+            if int(multiprocessing.cpu_count() * 0.7) > 1
+            else 1
+        )
+    ) as pool:
+        match fusion_code:
+            case 6:
+                ofiq = ofiq_engine(path, dir=True)
+                bqat_results = process_images(default_engine, path, pool)
+                output = {
+                    "results": [i | bqat_results[i["file"]] for i in ofiq["results"]],
+                    "logs": ofiq.get("logs"),
+                }
+            case 5:
+                ofiq = ofiq_engine(path, dir=True)
+                biqt_results = process_images(biqt_engine, path, pool)
+                output = {
+                    "results": [i | biqt_results[i["file"]] for i in ofiq["results"]],
+                    "logs": ofiq.get("logs"),
+                }
+            case 3:
+                bqat_results = process_images(default_engine, path, pool)
+                biqt_results = process_images(biqt_engine, path, pool)
+                output = {
+                    "results": [
+                        biqt_results[i["file"]] | i for i in bqat_results.values()
+                    ]
+                }
+            case 7:
+                ofiq = ofiq_engine(path, dir=True)
+                bqat_results = process_images(default_engine, path, pool)
+                biqt_results = process_images(biqt_engine, path, pool)
+                output = {
+                    "results": [
+                        i | bqat_results[i["file"]] | biqt_results[i["file"]]
+                        for i in ofiq["results"]
+                    ],
+                    "logs": ofiq.get("logs"),
+                }
+            case _:
+                raise ValueError(f"Unsupported fusion code: {fusion_code}")
+
+        return output

@@ -1,3 +1,19 @@
+<a name="v1.5.0"></a>
+# v1.5.0 (2024-11-07)
+
+## 🛠 Fixes
+
+- Fix pupil location bug
+
+## 🚀 Features
+
+- Add metrics for face location offset
+- Add metrics for face area ratio
+- Add image metadata, includes brightness, dynamic range, contrast and sharpness
+- Add fusion engine mode for face modality
+- Disable warning log in prod mode
+
+
 <a name="v1.4.5"></a>
 # v1.4.5 (2024-10-09)
 
@@ -44,6 +60,7 @@
 # v1.4.0 (2024-04-10)
 
 ## 🚀 Features
+
 - Introduce OFIQ engine for face modality (alpha) [#15](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/15)
 
 ## 🛠 Fixes
