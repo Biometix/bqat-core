@@ -1184,14 +1184,14 @@ def fusion_engine(path: str, fusion_code: int = 6):
                     "results": [i | bqat_results[i["file"]] for i in ofiq["results"]],
                     "logs": ofiq.get("logs"),
                 }
-            case 5:
+            case 3:
                 ofiq = ofiq_engine(path, dir=True)
                 biqt_results = process_images(biqt_engine, path, pool)
                 output = {
                     "results": [i | biqt_results[i["file"]] for i in ofiq["results"]],
                     "logs": ofiq.get("logs"),
                 }
-            case 3:
+            case 5:
                 bqat_results = process_images(default_engine, path, pool)
                 biqt_results = process_images(biqt_engine, path, pool)
                 output = {
