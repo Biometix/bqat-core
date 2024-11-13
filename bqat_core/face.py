@@ -228,7 +228,7 @@ def biqt_engine(
     Returns:
         dict: _description_
     """
-    output = {"log": {}}
+    output = {"log": []}
 
     output.update(meta) if not (meta := get_biqt_attr(img_path)).get(
         "error"
@@ -546,7 +546,7 @@ def ofiq_engine(
     Returns:
         dict: _description_
     """
-    output = {"log": {}}
+    output = {"log": []}
 
     if dir:
         output.update({"results": meta.get("results")}) if not (
