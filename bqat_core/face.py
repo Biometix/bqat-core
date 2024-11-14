@@ -246,13 +246,13 @@ def get_biqt_attr(img_path: str) -> dict:
         try:
             raw = subprocess.check_output(["biqt", "-m", "face", img_path])
         except Exception:
-            raise RuntimeError("Engine failed")
+            raise RuntimeError("biqt engine failed")
         content = StringIO(raw.decode())
         attributes = csv.DictReader(content)
         for attribute in attributes:
             output.update({attribute.get("Key"): float(attribute.get("Value"))})
         if not output:
-            raise RuntimeError("Engine failed")
+            raise RuntimeError("biqt engine failed")
         output["quality"] *= 10  # Observe ISO/IEC 29794-1
     except Exception as e:
         traceback.print_exception(e)
@@ -587,7 +587,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                         )
                 except Exception as e:
                     traceback.print_exception(e)
-                    raise RuntimeError(f"Engine failed: {str(e)}")
+                    raise RuntimeError(f"ofiq engine failed: {str(e)}")
                 with open(temp_output) as content:
                     lines = csv.DictReader(content, delimiter=";")
                     for line in lines:
@@ -605,7 +605,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                         rectified.update(line)
                         output["results"].append(convert_values_to_number(rectified))
                     if not output["results"]:
-                        raise RuntimeError("No output")
+                        raise RuntimeError("no output")
         else:
             output = {}
             try:
@@ -619,7 +619,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                     ]
                 )
             except Exception:
-                raise RuntimeError("Engine failed")
+                raise RuntimeError("ofiq engine failed")
             content = StringIO(raw.decode())
 
             # OFIQ v1.0.0-rc.1
@@ -715,7 +715,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
             output = {key: float(value) for key, value in output.items()}
 
             if not output:
-                raise RuntimeError("Engine failed")
+                raise RuntimeError("ofiq engine failed")
     except Exception as e:
         traceback.print_exception(e)
         return {"error": str(e)}

@@ -142,20 +142,19 @@ def convert_values_to_number(d) -> dict[str, int | float | str | bool]:
 
 def merge_outputs(list_a: List[dict], list_b: List[dict], key: str) -> List[dict]:
     output = []
-    logs = []
-
     dict_list_b = {item[key]: item for item in list_b}
 
     for item in list_a:
+        logs = []
         target = item[key]
-        if item.get("logs"):
-            logs.extend(item["logs"])
+        if item.get("log"):
+            logs.extend(item["log"])
         if target in dict_list_b:
-            if dict_list_b[target].get("logs"):
-                logs.extend(dict_list_b[target]["logs"])
+            if dict_list_b[target].get("log"):
+                logs.extend(dict_list_b[target]["log"])
             merged = item | dict_list_b[target]
             if logs:
-                merged.update({"logs": logs})
+                merged.update({"log": logs})
             output.append(merged)
         else:
             output.append(item)
