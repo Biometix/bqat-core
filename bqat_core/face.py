@@ -1178,7 +1178,7 @@ def fusion_engine(path: str, fusion_code: int = 6):
                 biqt_results = process_images(biqt_engine, path, pool)
                 output = {
                     "results": merge_outputs(biqt_results, ofiq["results"], "file"),
-                    "logs": ofiq.get("logs"),
+                    "log": ofiq.get("log"),
                 }
             case 5:
                 bqat_results = process_images(default_engine, path, pool)
@@ -1191,7 +1191,7 @@ def fusion_engine(path: str, fusion_code: int = 6):
                 bqat_results = process_images(default_engine, path, pool)
                 output = {
                     "results": merge_outputs(bqat_results, ofiq["results"], "file"),
-                    "logs": ofiq.get("logs"),
+                    "log": ofiq.get("log"),
                 }
             case 7:
                 ofiq = ofiq_engine(path, dir=True)
@@ -1204,7 +1204,7 @@ def fusion_engine(path: str, fusion_code: int = 6):
                     "results": merge_outputs(
                         output["results"], ofiq["results"], "file"
                     ),
-                    "logs": ofiq.get("logs"),
+                    "log": ofiq.get("log"),
                 }
             case _:
                 raise ValueError(f"Illegal fusion code: {fusion_code} (3, 5, 6, 7).")
