@@ -154,7 +154,8 @@ def merge_outputs(list_a: List[dict], list_b: List[dict], key: str) -> List[dict
             if dict_list_b[target].get("logs"):
                 logs.extend(dict_list_b[target]["logs"])
             merged = item | dict_list_b[target]
-            merged.update({"logs": logs})
+            if logs:
+                merged.update({"logs": logs})
             output.append(merged)
         else:
             output.append(item)
