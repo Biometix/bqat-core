@@ -30,6 +30,8 @@ from .utils import (
     camel_to_snake,
     convert_values_to_number,
     # get_color_name,
+    merge_outputs,
+    # prepare_input,
 )
 
 
@@ -61,7 +63,7 @@ def default_engine(
     Returns:
         dict: _description_
     """
-    output = {"log": []}
+    output = {"log": [], "file": img_path}
 
     try:
         img = cv.imread(img_path)
@@ -212,8 +214,6 @@ def default_engine(
     else:
         output.pop("log")
 
-    output["file"] = img_path
-
     return output
 
 
@@ -228,7 +228,7 @@ def biqt_engine(
     Returns:
         dict: _description_
     """
-    output = {"log": []}
+    output = {"log": [], "file": img_path}
 
     output.update(meta) if not (meta := get_biqt_attr(img_path)).get(
         "error"
@@ -236,8 +236,6 @@ def biqt_engine(
 
     if not output["log"]:
         output.pop("log")
-
-    output["file"] = img_path
 
     return output
 
@@ -248,13 +246,13 @@ def get_biqt_attr(img_path: str) -> dict:
         try:
             raw = subprocess.check_output(["biqt", "-m", "face", img_path])
         except Exception:
-            raise RuntimeError("Engine failed")
+            raise RuntimeError("biqt engine failed")
         content = StringIO(raw.decode())
         attributes = csv.DictReader(content)
         for attribute in attributes:
             output.update({attribute.get("Key"): float(attribute.get("Value"))})
         if not output:
-            raise RuntimeError("Engine failed")
+            raise RuntimeError("biqt engine failed")
         output["quality"] *= 10  # Observe ISO/IEC 29794-1
     except Exception as e:
         traceback.print_exception(e)
@@ -549,10 +547,15 @@ def ofiq_engine(
     output = {"log": []}
 
     if dir:
-        output.update({"results": meta.get("results")}) if not (
-            meta := get_ofiq_attr(path, dir=dir)
-        ).get("error") else output["log"].append({"face attributes": meta["error"]})
+        if (meta := get_ofiq_attr(path, dir=dir)).get("error"):
+            output["log"].append({"face attributes": meta["error"]})
+        output["results"] = merge_outputs(
+            output.get("results", []),
+            meta.get("results", []),
+            "file",
+        )
     else:
+        output["file"] = path
         output.update(meta) if not (meta := get_ofiq_attr(path, dir=dir)).get(
             "error"
         ) else output["log"].append({"face attributes": meta["error"]})
@@ -586,7 +589,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                         )
                 except Exception as e:
                     traceback.print_exception(e)
-                    raise RuntimeError(f"Engine failed: {str(e)}")
+                    raise RuntimeError(f"ofiq engine failed: {str(e)}")
                 with open(temp_output) as content:
                     lines = csv.DictReader(content, delimiter=";")
                     for line in lines:
@@ -604,7 +607,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                         rectified.update(line)
                         output["results"].append(convert_values_to_number(rectified))
                     if not output["results"]:
-                        raise RuntimeError("No output")
+                        raise RuntimeError("ofiq engine failed: empty result list")
         else:
             output = {}
             try:
@@ -618,7 +621,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                     ]
                 )
             except Exception:
-                raise RuntimeError("Engine failed")
+                raise RuntimeError("ofiq engine failed")
             content = StringIO(raw.decode())
 
             # OFIQ v1.0.0-rc.1
@@ -714,7 +717,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
             output = {key: float(value) for key, value in output.items()}
 
             if not output:
-                raise RuntimeError("Engine failed")
+                raise RuntimeError("ofiq engine failed")
     except Exception as e:
         traceback.print_exception(e)
         return {"error": str(e)}
@@ -1162,55 +1165,50 @@ def get_image_meta(img: np.array) -> dict:
 
 def fusion_engine(path: str, fusion_code: int = 6):
     def process_images(engine_func, path, pool):
-        results = {}
-        for result in pool.map(
-            engine_func, [p.as_posix() for p in Path(path).rglob("*")]
-        ):
-            results[result["file"]] = result
-        return results
+        return pool.map(engine_func, [p.as_posix() for p in Path(path).rglob("*")])
 
     with multiprocessing.Pool(
         processes=(
             int(multiprocessing.cpu_count() * 0.7)
             if int(multiprocessing.cpu_count() * 0.7) > 1
             else 1
-        )
+        ),
     ) as pool:
         match fusion_code:
-            case 6:
-                ofiq = ofiq_engine(path, dir=True)
-                bqat_results = process_images(default_engine, path, pool)
-                output = {
-                    "results": [i | bqat_results[i["file"]] for i in ofiq["results"]],
-                    "logs": ofiq.get("logs"),
-                }
             case 3:
                 ofiq = ofiq_engine(path, dir=True)
                 biqt_results = process_images(biqt_engine, path, pool)
                 output = {
-                    "results": [i | biqt_results[i["file"]] for i in ofiq["results"]],
-                    "logs": ofiq.get("logs"),
+                    "results": merge_outputs(biqt_results, ofiq["results"], "file"),
+                    "log": ofiq.get("log"),
                 }
             case 5:
                 bqat_results = process_images(default_engine, path, pool)
                 biqt_results = process_images(biqt_engine, path, pool)
                 output = {
-                    "results": [
-                        biqt_results[i["file"]] | i for i in bqat_results.values()
-                    ]
+                    "results": merge_outputs(biqt_results, bqat_results, "file"),
+                }
+            case 6:
+                ofiq = ofiq_engine(path, dir=True)
+                bqat_results = process_images(default_engine, path, pool)
+                output = {
+                    "results": merge_outputs(bqat_results, ofiq["results"], "file"),
+                    "log": ofiq.get("log"),
                 }
             case 7:
                 ofiq = ofiq_engine(path, dir=True)
                 bqat_results = process_images(default_engine, path, pool)
                 biqt_results = process_images(biqt_engine, path, pool)
                 output = {
-                    "results": [
-                        i | bqat_results[i["file"]] | biqt_results[i["file"]]
-                        for i in ofiq["results"]
-                    ],
-                    "logs": ofiq.get("logs"),
+                    "results": merge_outputs(biqt_results, bqat_results, "file"),
+                }
+                output = {
+                    "results": merge_outputs(
+                        output["results"], ofiq["results"], "file"
+                    ),
+                    "log": ofiq.get("log"),
                 }
             case _:
-                raise ValueError(f"Unsupported fusion code: {fusion_code}")
+                raise ValueError(f"Illegal fusion code: {fusion_code} (3, 5, 6, 7).")
 
         return output
