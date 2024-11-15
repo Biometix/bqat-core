@@ -547,11 +547,13 @@ def ofiq_engine(
     output = {"log": []}
 
     if dir:
-        output["results"] = []
-
         if (meta := get_ofiq_attr(path, dir=dir)).get("error"):
             output["log"].append({"face attributes": meta["error"]})
-        output["results"] = merge_outputs(output["results"], meta["results"], "file")
+        output["results"] = merge_outputs(
+            output.get("results", []),
+            meta.get("results", []),
+            "file",
+        )
     else:
         output["file"] = path
         output.update(meta) if not (meta := get_ofiq_attr(path, dir=dir)).get(
@@ -605,7 +607,7 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                         rectified.update(line)
                         output["results"].append(convert_values_to_number(rectified))
                     if not output["results"]:
-                        raise RuntimeError("no output")
+                        raise RuntimeError("ofiq engine failed: empty result list")
         else:
             output = {}
             try:
