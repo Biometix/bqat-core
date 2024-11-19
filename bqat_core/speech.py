@@ -5,6 +5,8 @@ from io import StringIO
 
 import pandas as pd
 
+CWD = "NISQA/"
+
 
 def process_speech(
     input_path: str,
@@ -40,21 +42,21 @@ def process_speech(
 
 
 def get_metrics_transmitted(file_path: str) -> dict:
-    model = "weights/nisqa.tar"
     output = {}
     try:
         raw = subprocess.check_output(
             [
-                "conda",
-                "run",
-                "-n",
-                "nisqa",
-                "python",
-                "run.py",
+                # "conda",
+                # "run",
+                # "-n",
+                # "nisqa",
+                # "python",
+                "python3",
+                f"{CWD}run.py",
                 "--mode",
                 "predict_file",
                 "--pretrained_model",
-                model,
+                f"{CWD}weights/nisqa.tar",
                 "--deg",
                 file_path,
                 "--output_dir",
@@ -78,21 +80,21 @@ def get_metrics_transmitted(file_path: str) -> dict:
 
 
 def get_metrics_synthesized(file_path: str) -> dict:
-    model = "weights/nisqa_tts.tar"
     output = {}
     try:
         raw = subprocess.check_output(
             [
-                "conda",
-                "run",
-                "-n",
-                "nisqa",
-                "python",
-                "run.py",
+                # "conda",
+                # "run",
+                # "-n",
+                # "nisqa",
+                # "python",
+                "python3",
+                f"{CWD}run.py",
                 "--mode",
                 "predict_file",
                 "--pretrained_model",
-                model,
+                f"{CWD}weights/nisqa_tts.tar",
                 "--deg",
                 file_path,
                 "--output_dir",
@@ -137,16 +139,17 @@ def get_metrics_batch(folder: str) -> tuple:
 def get_metrics_synthesized_batch(folder: str) -> pd.DataFrame:
     raw = subprocess.run(
         [
-            "conda",
-            "run",
-            "-n",
-            "nisqa",
-            "python",
-            "run.py",
+            # "conda",
+            # "run",
+            # "-n",
+            # "nisqa",
+            # "python",
+            "python3",
+            f"{CWD}run.py",
             "--mode",
             "predict_dir",
             "--pretrained_model",
-            "weights/nisqa_tts.tar",
+            f"{CWD}weights/nisqa_tts.tar",
             "--data_dir",
             folder,
             "--output_dir",
@@ -172,16 +175,17 @@ def get_metrics_synthesized_batch(folder: str) -> pd.DataFrame:
 def get_metrics_transmitted_batch(folder: str) -> pd.DataFrame:
     raw = subprocess.run(
         [
-            "conda",
-            "run",
-            "-n",
-            "nisqa",
-            "python",
-            "run.py",
+            # "conda",
+            # "run",
+            # "-n",
+            # "nisqa",
+            # "python",
+            "python3",
+            f"{CWD}run.py",
             "--mode",
             "predict_dir",
             "--pretrained_model",
-            "weights/nisqa.tar",
+            f"{CWD}weights/nisqa.tar",
             "--data_dir",
             folder,
             "--output_dir",

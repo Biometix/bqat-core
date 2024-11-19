@@ -1,3 +1,11 @@
+<a name="v1.5.1"></a>
+# v1.5.1 (2024-11-18)
+
+## 🛠 Fixes
+
+- Refactor speech engine to optimize container size
+
+
 <a name="v1.5.0"></a>
 # v1.5.0 (2024-11-07)
 
