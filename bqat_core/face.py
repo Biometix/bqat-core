@@ -34,6 +34,9 @@ from .utils import (
     # prepare_input,
 )
 
+BQAT_CWD = "BQAT/"
+OFIQ_CWD = "OFIQ/"
+
 
 def scan_face(path: str, engine: str = "bqat", **params) -> dict:
     match engine.casefold():
@@ -301,7 +304,7 @@ def get_biqt_attr(img_path: str) -> dict:
 def is_smile(img: np.array) -> dict:
     try:
         img_h, img_w, _ = img.shape
-        smileCascade = cv.CascadeClassifier("bqat_core/misc/haarcascade_smile.xml")
+        smileCascade = cv.CascadeClassifier(f"{BQAT_CWD}haarcascade_smile.xml")
         smile = smileCascade.detectMultiScale(
             cv.cvtColor(img, cv.COLOR_BGR2GRAY),
             scaleFactor=1.15,
@@ -576,9 +579,9 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                     with open(temp_log, "w") as f:
                         subprocess.run(
                             [
-                                "./OFIQ/bin/OFIQSampleApp",
+                                f"{OFIQ_CWD}bin/OFIQSampleApp",
                                 "-c",
-                                "./OFIQ/ofiq_config.jaxn",
+                                f"{OFIQ_CWD}ofiq_config.jaxn",
                                 "-i",
                                 path,
                                 "-o",
@@ -613,9 +616,9 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
             try:
                 raw = subprocess.check_output(
                     [
-                        "./OFIQ/bin/OFIQSampleApp",
+                        f"{OFIQ_CWD}bin/OFIQSampleApp",
                         "-c",
-                        "./OFIQ/ofiq_config.jaxn",
+                        f"{OFIQ_CWD}ofiq_config.jaxn",
                         "-i",
                         path,
                     ]
@@ -953,7 +956,7 @@ def get_image_meta(img: np.array) -> dict:
 #         # Create a image segmenter instance with the image mode:
 #         options = ImageSegmenterOptions(
 #             base_options=BaseOptions(
-#                 model_asset_path="bqat_core/misc/BQAT/selfie_segmenter.tflite"
+#                 model_asset_path=f"{BQAT_CWD}selfie_segmenter.tflite"
 #             ),
 #             running_mode=RunningMode.IMAGE,
 #             output_category_mask=True,
@@ -1062,7 +1065,7 @@ def get_image_meta(img: np.array) -> dict:
 #         # Create a image segmenter instance with the image mode:
 #         options = ImageSegmenterOptions(
 #             base_options=BaseOptions(
-#                 model_asset_path="bqat_core/misc/BQAT/hair_segmenter.tflite",
+#                 model_asset_path=f"{BQAT_CWD}hair_segmenter.tflite",
 #             ),
 #             running_mode=RunningMode.IMAGE,
 #             output_category_mask=True,
