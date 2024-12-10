@@ -1,9 +1,23 @@
+<a name="v1.5.2"></a>
+# v1.5.2 (2024-12-05)
+
+## 🚀 Features
+
+- Add support for CPU allocation control
+- Add metrics for colour temperature (pro)
+
+
 <a name="v1.5.1"></a>
 # v1.5.1 (2024-11-18)
+
+## 🚀 Features
+
+- Add metrics for image colour temperature (pro)
 
 ## 🛠 Fixes
 
 - Refactor speech engine to optimize container size
+- Better handling for failed face mesh detection
 
 
 <a name="v1.5.0"></a>
@@ -20,6 +34,11 @@
 - Add image metadata, includes brightness, dynamic range, contrast and sharpness
 - Add fusion engine mode for face modality
 - Disable warning log in prod mode
+- Add metrics for eye gazing direction (pro)
+- Add eye colour detection (pro)
+- Add metrics for image background (pro)
+- Add metrics for hair coverage (pro)
+- Add metrics for headgear detection (pro)
 
 
 <a name="v1.4.5"></a>
