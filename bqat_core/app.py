@@ -11,23 +11,23 @@ SOURCE_TYPE = ["jpg", "jpeg", "bmp", "jp2", "wsq"]
 TARGET_TYPE = "png"
 
 
-def scan(file: str, mode: str, **params):
-    """_summary_
+def scan(input: str, mode: str, **params):
+    """Distribute biometric data to the interface of specified modality.
 
     Args:
-        file (str): _description_
+        input: path to the input, file path or directory.
 
     Returns:
-        dict: _description_
+        A dictionary containing the results as well as the error message.
     """
-    meta = {"file": file}
+    meta = {"file": input}
     error = []
 
     match mode:
         case "iris":
             try:
                 output = scan_iris(
-                    img_path=file,
+                    img_path=input,
                 )
                 meta.update(output)
             except Exception as e:
@@ -37,12 +37,12 @@ def scan(file: str, mode: str, **params):
             try:
                 if (params.get("engine")) == "ofiq" and params.get("type") == "folder":
                     return scan_face(
-                        path=file,
+                        path=input,
                         **params,
                     )
                 else:
                     output = scan_face(
-                        path=file,
+                        path=input,
                         **params,
                     )
                     meta.update(output)
@@ -55,19 +55,19 @@ def scan(file: str, mode: str, **params):
                     converted = False
                     source = params["source"] if params.get("source") else SOURCE_TYPE
                     target = params["target"] if params.get("target") else TARGET_TYPE
-                    file, input_type, output_type = convert(
-                        file,
+                    input, input_type, output_type = convert(
+                        input,
                         source,
                         target,
                         directory=tmpdir,
                     )
                     converted = True if output_type != input_type else False
                     output = scan_finger(
-                        img_path=file,
+                        img_path=input,
                     )
                     meta.update(output)
                     if converted:
-                        os.remove(file)
+                        os.remove(input)
                         if not meta.get("log"):
                             meta["log"] = []
                         meta["log"].append(
@@ -80,12 +80,12 @@ def scan(file: str, mode: str, **params):
             try:
                 if params["type"] == "file":
                     output = process_speech(
-                        input_path=file, input_type=params.get("type")
+                        input_path=input, input_type=params.get("type")
                     )
                     meta.update(output)
                 elif params["type"] == "folder":
                     output = process_speech(
-                        input_path=file, input_type=params.get("type")
+                        input_path=input, input_type=params.get("type")
                     )
                     meta.update(output)
                     if log := output.get("log"):
