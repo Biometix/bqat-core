@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 from typing import List
 
+import psutil
+
 # import cv2 as cv
 # import numpy as np
 # import webcolors
@@ -303,3 +305,18 @@ def merge_outputs(list_a: List[dict], list_b: List[dict], key: str) -> List[dict
 #     # Return the average temperature from both x and y interpolations
 #     temperature = (temperature_x + temperature_y) / 2
 #     return round(temperature)
+
+
+def cpu_usage_to_processes(cpu_usage: float) -> int:
+    try:
+        processes = (
+            int(psutil.cpu_count(logical=False) * cpu_usage)
+            if int(psutil.cpu_count(logical=False) * cpu_usage) > 1
+            else 1
+        )
+    except Exception as e:
+        print(
+            f"Failed to get number of processes: {e}, falling back to default value '1'."
+        )
+        processes = 1
+    return processes

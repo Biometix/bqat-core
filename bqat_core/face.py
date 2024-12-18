@@ -30,10 +30,11 @@ from scipy.spatial.distance import euclidean
 from .utils import (
     camel_to_snake,
     convert_values_to_number,
-    # get_color_name,
-    merge_outputs,
     # prepare_input,
     # rgb_to_color_temperature,
+    cpu_usage_to_processes,
+    # get_color_name,
+    merge_outputs,
 )
 
 BQAT_CWD = "BQAT/"
@@ -1218,16 +1219,12 @@ def get_image_meta(img: np.array) -> dict:
 #     }
 
 
-def fusion_engine(path: str, fusion_code: int = 6, cpu: float = 0.7):
+def fusion_engine(path: str, fusion_code: int = 6, cpu: float = 0.8):
     def process_images(engine_func, path, pool):
         return pool.map(engine_func, [p.as_posix() for p in Path(path).rglob("*")])
 
     with multiprocessing.Pool(
-        processes=(
-            int(multiprocessing.cpu_count() * cpu)
-            if int(multiprocessing.cpu_count() * cpu) > 1
-            else 1
-        ),
+        processes=cpu_usage_to_processes(cpu),
     ) as pool:
         match fusion_code:
             case 3:
