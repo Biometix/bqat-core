@@ -345,14 +345,14 @@ def get_biqt_attr(img_path: str) -> dict:
 
 def is_smile(img: np.array) -> dict:
     try:
-        img_h, img_w, _ = img.shape
+        # img_h, img_w, _ = img.shape
         smileCascade = cv.CascadeClassifier(f"{BQAT_CWD}haarcascade_smile.xml")
         smile = smileCascade.detectMultiScale(
-            cv.cvtColor(img, cv.COLOR_BGR2GRAY),
-            scaleFactor=1.15,
-            minNeighbors=20,
-            minSize=(int(img_h / 6), int(img_w / 3)),
-            maxSize=(int(img_h / 4), int(img_w / 2)),
+            cv.resize(cv.cvtColor(img, cv.COLOR_BGR2GRAY), (128, 128)),
+            scaleFactor=1.5,
+            minNeighbors=30,
+            # minSize=(int(img_h / 6), int(img_w / 3)),
+            # maxSize=(int(img_h / 4), int(img_w / 2)),
             flags=cv.CASCADE_DO_CANNY_PRUNING,
         )
         smile = True if len(smile) >= 1 else False
@@ -548,33 +548,51 @@ def is_glasses(face_mesh: object, img: np.array) -> dict:
     try:
         img_h, img_w, _ = img.shape
 
-        nose_bridge = [6, 197, 195, 5, 4, 1, 237, 44, 274, 457]
+        nose_bridge = [5, 9, 243, 463]
 
-        nose_bridge_x = []
-        nose_bridge_y = []
-        for i, lm in enumerate(face_mesh.landmark):
-            if i in nose_bridge:
-                nose_bridge_x.append(lm.x)
-                nose_bridge_y.append(lm.y)
-            if i == 8:
-                y_min = int(lm.y * img_h)
-            if i == 5:
-                y_max = int(lm.y * img_h)
+        nose_bridge_x = [lm.x for i, lm in enumerate(face_mesh.landmark) if i in nose_bridge]
+        nose_bridge_y = [lm.y for i, lm in enumerate(face_mesh.landmark) if i in nose_bridge]
 
+        y_min = int(min(nose_bridge_y) * img_h)
+        y_max = int(max(nose_bridge_y) * img_h)
         x_min = int(min(nose_bridge_x) * img_w)
         x_max = int(max(nose_bridge_x) * img_w)
 
-        target_area = img[x_min:x_max, y_min:y_max]
+        target_area = img[y_min:y_max, x_min:x_max]
 
-        bl = cv.GaussianBlur(target_area, (3, 3), sigmaX=0, sigmaY=0)
-        eg = cv.Canny(bl, 100, 200)
+        target_area = cv.cvtColor(target_area, cv.COLOR_BGR2GRAY)
 
-        center = eg.T[(int(len(eg.T) / 2))]
+        target_area = np.float32(target_area)
+
+        contrast_factor = 0.9
+        target_area = cv.convertScaleAbs(target_area, alpha=contrast_factor, beta=0)
+
+        sharpen_kernel = np.array(
+            [
+                [1, 2, 1],
+                [0, 0, 0],
+                [-1, -2, -1],
+            ]
+        )
+        out = cv.filter2D(target_area, -1, sharpen_kernel)
+
+        sharpen_kernel = np.array(
+            [
+                [0, -1, 0],
+                [-1, 4, -1],
+                [0, -1, 0],
+            ]
+        )
+        out = cv.filter2D(out, -1, sharpen_kernel)
+
+        edge = cv.Canny(out, threshold1=300, threshold2=500)
+
+        center = edge[:, edge.shape[1] // 2]
 
     except Exception as e:
         traceback.print_exception(e)
         return {"error": str(e)}
-    return {"glasses": True if 255 in center else False}
+    return {"glasses": True if np.any(center == 255) else False}
 
 
 def ofiq_engine(
