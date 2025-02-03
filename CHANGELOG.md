@@ -1,3 +1,12 @@
+<a name="v1.5.3"></a>
+# v1.5.3 (2025-02-03)
+
+## 🛠 Fixes
+
+- Improve smile estimation performance
+- Improve eyeglasses detection performance
+
+
 <a name="v1.5.2"></a>
 # v1.5.2 (2024-12-05)
 
