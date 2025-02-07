@@ -11,18 +11,18 @@ import cv2 as cv
 import numpy as np
 
 # import onnxruntime
-# from mediapipe import Image, ImageFormat
+from mediapipe import Image, ImageFormat
+
 # import imquality.brisque as bk
 # from deepface import DeepFace as df
 from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
-
-# from mediapipe.tasks.python import BaseOptions
-# from mediapipe.tasks.python.vision import (
-#     ImageSegmenter,
-#     ImageSegmenterOptions,
-#     RunningMode,
-# )
+from mediapipe.tasks.python import BaseOptions
+from mediapipe.tasks.python.vision import (
+    ImageSegmenter,
+    ImageSegmenterOptions,
+    RunningMode,
+)
 from scipy.spatial.distance import euclidean
 
 # from skimage import measure
@@ -97,7 +97,7 @@ def default_engine(
 
     try:
         img = cv.imread(img_path)
-        target_region = img
+        target_region = img.copy()
         h, w, _ = img.shape
         output.update(
             {
@@ -253,6 +253,9 @@ def default_engine(
         # ).get("error") else output["log"].append(
         #     {"pupil color detection": meta["error"]}
         # )
+        output.update(meta) if not (
+            meta := get_head_location(mesh, img, target_region, output)
+        ).get("error") else output["log"].append({"head location": meta["error"]})
 
     if output.get("log"):
         output["log"] = output.pop("log")
@@ -1535,4 +1538,93 @@ def get_brightness_variance(img: np.array, block_size=(50, 50)) -> dict:
         return {"error": str(e)}
     return {
         "brightness_variance": brightness_variance,
+    }
+
+
+def get_head_location(
+    face_mesh: object,
+    img: np.array,
+    target_region: np.array,
+    output: dict,
+) -> dict:
+    try:
+        img_h, img_w, _ = target_region.shape
+
+        left_side = [127, 234, 93]
+        right_side = [356, 454, 323]
+        bottom_chin = [148, 152, 377]
+
+        head_x = [
+            lm.x
+            for i, lm in enumerate(face_mesh.landmark)
+            if i in left_side + right_side
+        ]
+        head_y = [lm.y for i, lm in enumerate(face_mesh.landmark) if i in bottom_chin]
+
+        y_max = int(int(max(head_y) * img_h) + output["bbox_upper"])
+        x_min = int(int(min(head_x) * img_w) + output["bbox_left"])
+        x_max = int(int(max(head_x) * img_w) + output["bbox_left"])
+
+        options = ImageSegmenterOptions(
+            base_options=BaseOptions(
+                model_asset_path=f"{BQAT_CWD}selfie_segmenter.tflite",
+            ),
+            running_mode=RunningMode.IMAGE,
+            output_category_mask=True,
+        )
+
+        mp_image = Image(image_format=ImageFormat.SRGB, data=img)
+
+        with ImageSegmenter.create_from_options(options) as segmenter:
+            segmented_masks = segmenter.segment(mp_image)
+            image_data = cv.cvtColor(mp_image.numpy_view(), cv.COLOR_BGR2RGB)
+
+            condition = (
+                np.stack(
+                    (segmented_masks.category_mask.numpy_view(),) * 3,
+                    axis=-1,
+                )
+                > 0.2
+            )
+
+            bg_image = np.full(
+                (
+                    image_data.shape[0],
+                    image_data.shape[1],
+                    3,
+                ),
+                0,
+                dtype=np.uint8,
+            )
+            fg_image = np.full(
+                (
+                    image_data.shape[0],
+                    image_data.shape[1],
+                    3,
+                ),
+                255,
+                dtype=np.uint8,
+            )
+            output_image = np.where(condition, fg_image, bg_image)
+
+        black_pixels = np.column_stack(np.where(output_image == 0))
+        if not black_pixels.size:
+            y_min = -1
+        else:
+            y_min, _, _ = black_pixels[np.argmin(black_pixels[:, 0])]
+            y_min = int(y_min)
+
+        # x_max, _, _ = black_pixels[np.argmax(black_pixels[:, 1])]
+        # x_min, _, _ = black_pixels[np.argmin(black_pixels[:, 1])]
+
+    except RuntimeError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+    return {
+        "head_top": y_min,
+        "head_bottom": y_max,
+        "head_right": x_max,
+        "head_left": x_min,
     }
