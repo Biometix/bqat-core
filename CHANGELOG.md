@@ -1,7 +1,15 @@
+<a name="v1.6.0"></a>
+# v1.6.0 (2025-02-07)
+
+## 🚀 Features
+
+- Add head location estimation
+
+
 <a name="v1.5.3"></a>
 # v1.5.3 (2025-02-03)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Improve smile estimation performance
 - Improve eyeglasses detection performance
@@ -23,7 +31,7 @@
 
 - Add metrics for image colour temperature (pro)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Refactor speech engine to optimize container size
 - Better handling for failed face mesh detection
@@ -32,7 +40,7 @@
 <a name="v1.5.0"></a>
 # v1.5.0 (2024-11-07)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Fix pupil location bug
 
@@ -53,7 +61,7 @@
 <a name="v1.4.5"></a>
 # v1.4.5 (2024-10-09)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Fix OFIQ face engine folder mode output vaule type issue
 - Switch to system temporary directory for OFIQ folder mode
@@ -62,7 +70,7 @@
 <a name="v1.4.4"></a>
 # v1.4.4 (2024-09-26)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Fix error log issue
 - Switch to system temporary directory for fingerprint conversion
@@ -71,7 +79,7 @@
 <a name="v1.4.3"></a>
 # v1.4.3 (2024-08-14)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Rebuild OFIQ engine to support single file processing
 
@@ -79,7 +87,7 @@
 <a name="v1.4.2"></a>
 # v1.4.2 (2024-05-01)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Fix reporting filepath label issue
 
@@ -87,7 +95,7 @@
 <a name="v1.4.1"></a>
 # v1.4.1 (2024-04-22)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Fix speech modality logging issue
 
@@ -99,7 +107,7 @@
 
 - Introduce OFIQ engine for face modality (alpha) [#15](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/15)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Iris resize and convert issue
 
@@ -107,7 +115,7 @@
 <a name="v1.3.6"></a>
 # v1.3.6 (2024-04-04)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Update iris engine resizing range to improve iris engine robustness
 
@@ -115,7 +123,7 @@
 <a name="v1.3.5"></a>
 # v1.3.5 (2024-03-13)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Fix fingerprint modality metrics naming issue [#20](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/20)
 
@@ -123,7 +131,7 @@
 <a name="v1.3.4"></a>
 # v1.3.4 (2024-03-13)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Fix fingerprint file format conversion issue [#19](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/19)
 
@@ -131,11 +139,11 @@
 <a name="v1.3.3"></a>
 # v1.3.3 (2024-02-26)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Lower resolution to improve engine robustness [#17](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/17)
 
-## ⚙️ Miscellaneous Tasks
+## 📎 Miscellaneous Tasks
 
 - Add alternate conda env file for speech
 
@@ -143,7 +151,7 @@
 <a name="v1.3.2"></a>
 # v1.3.2 (2023-12-14)
 
-## ⚙️ Miscellaneous Tasks
+## 📎 Miscellaneous Tasks
 
 - Update for refactoring image building configuration
 
@@ -151,7 +159,7 @@
 <a name="v1.3.1"></a>
 # v1.3.1 (2023-07-28)
 
-## ⚙️ Miscellaneous Tasks
+## 📎 Miscellaneous Tasks
 
 - Cleanup cli log
 
@@ -166,7 +174,7 @@
 - Update face quality scoring with ISO/IEC 29794-1 standard scale (1-100) [#11](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/11)
 - Add glasses detection for face modality
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Fix iris score issue with low sclera related values [#10](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/10)
 
@@ -174,7 +182,7 @@
 <a name="v1.2.2"></a>
 # v1.2.2 (2023-06-09)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
 - Speech mode recursive glob
 
@@ -189,7 +197,7 @@
 <a name="v1.2.0"></a>
 # v1.2.0 (2023-04-18)
 
-## ⚙️ Miscellaneous Tasks
+## 📎 Miscellaneous Tasks
 
 - Update Dockerfile and test cases for speech module
 
@@ -205,7 +213,7 @@
 - Disable df and bk
 - Add speech model [#3](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/3)
 
-## 🛠 Fixes
+## 🛠️️ Fixes
 
  - Bug fixes
 
@@ -213,7 +221,7 @@
 
 - Update readme
 
-## ⚙️ Miscellaneous Tasks
+## 📎 Miscellaneous Tasks
 
 - Initial commit
 
