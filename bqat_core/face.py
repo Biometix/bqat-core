@@ -10,18 +10,19 @@ from uuid import uuid4
 import cv2 as cv
 import numpy as np
 
-# from mediapipe import Image, ImageFormat
+# import onnxruntime
+from mediapipe import Image, ImageFormat
+
 # import imquality.brisque as bk
 # from deepface import DeepFace as df
 from mediapipe.python.solutions.face_detection import FaceDetection
 from mediapipe.python.solutions.face_mesh import FaceMesh
-
-# from mediapipe.tasks.python import BaseOptions
-# from mediapipe.tasks.python.vision import (
-#     ImageSegmenter,
-#     ImageSegmenterOptions,
-#     RunningMode,
-# )
+from mediapipe.tasks.python import BaseOptions
+from mediapipe.tasks.python.vision import (
+    ImageSegmenter,
+    ImageSegmenterOptions,
+    RunningMode,
+)
 from scipy.spatial.distance import euclidean
 
 # from skimage import measure
@@ -29,9 +30,11 @@ from scipy.spatial.distance import euclidean
 from .utils import (
     camel_to_snake,
     convert_values_to_number,
+    # prepare_input,
+    # rgb_to_color_temperature,
+    cpu_usage_to_processes,
     # get_color_name,
     merge_outputs,
-    # prepare_input,
 )
 
 BQAT_CWD = "BQAT/"
@@ -39,9 +42,23 @@ OFIQ_CWD = "OFIQ/"
 
 
 def scan_face(path: str, engine: str = "bqat", **params) -> dict:
+    """Process image with engine specified.
+
+    Args:
+        path: Path to the image.
+        engine: Name of the engine. Defaults to "bqat".
+        **params: Arbitrary keyword arguments.
+
+    Returns:
+        A dictionary containing the results and logs from submodules.
+    """
     match engine.casefold():
         case "bqat":
-            output = default_engine(path, params.get("confidence", 0.7))
+            output = default_engine(
+                path,
+                params.get("confidence", 0.7),
+                # params.get("pro", False),
+            )
         case "biqt":
             output = biqt_engine(path)
         case "ofiq":
@@ -49,27 +66,38 @@ def scan_face(path: str, engine: str = "bqat", **params) -> dict:
             # output = ofiq_engine(path, dir=dir)
             output = ofiq_engine(path, dir=True)
         case "fusion":
-            output = fusion_engine(path, params.get("fusion", 6))
+            output = fusion_engine(
+                path,
+                params.get("fusion", 6),
+                params.get("cpu", 0.7),
+            )
+        case _:
+            raise ValueError(f"Unknown engine: {engine}")
     return output
 
 
 def default_engine(
     img_path: str,
     confidence: float = 0.7,
+    # pro: bool = False,
 ) -> dict:
-    """_summary_
+    """Process image with native BQAT engine.
+
+    Sends image path into BQAT engine and returns the results.
 
     Args:
-        img_path (str): _description_
-        confidence (float, optional): _description_. Defaults to 0.7.
+        img_path: Path to the image.
+        confidence: Face detection confidence level threshold. Defaults to '0.7'.
+        pro: togle to enable pro version of native BQAT engine. Defaults to False.
 
     Returns:
-        dict: _description_
+        A dictionary containing the results and logs from submodules.
     """
     output = {"log": [], "file": img_path}
 
     try:
         img = cv.imread(img_path)
+        target_region = img.copy()
         h, w, _ = img.shape
         output.update(
             {
@@ -138,7 +166,7 @@ def default_engine(
     except Exception as e:
         traceback.print_exception(e)
         output["log"].append({"face detection": str(e)})
-        return output
+        # return output
 
     try:
         with FaceMesh(
@@ -171,9 +199,6 @@ def default_engine(
     # output.update(meta) if not (meta := get_offset(output)).get("error") else output[
     #     "log"
     # ].append({"offset detection": meta["error"]})
-    output.update(meta) if not (meta := get_face_ratio(output)).get(
-        "error"
-    ) else output["log"].append({"face ratio": meta["error"]})
     output.update(meta) if not (meta := get_image_meta(img)).get("error") else output[
         "log"
     ].append({"image metadata": meta["error"]})
@@ -186,6 +211,23 @@ def default_engine(
     # output.update(meta) if not (meta := is_blurry(img)).get("error") else output[
     #     "log"
     # ].append({"image blurriness": meta["error"]})
+    # output.update(meta) if not (meta := get_colour_temperature(img)).get(
+    #     "error"
+    # ) else output["log"].append({"colour temperature": meta["error"]})
+    output.update(meta) if not (meta := get_brightness_variance(img)).get(
+        "error"
+    ) else output["log"].append({"brightness variance": meta["error"]})
+
+    if output.get("face_detection"):
+        output.update(meta) if not (meta := get_face_ratio(output)).get(
+            "error"
+        ) else output["log"].append({"face ratio": meta["error"]})
+        # output.update(meta) if not (meta := get_hair_cover(img, output)).get(
+        #     "error"
+        # ) else output["log"].append({"hair coverage": meta["error"]})
+        # output.update(meta) if not (meta := get_hijab(img, output)).get(
+        #     "error"
+        # ) else output["log"].append({"hijab detection": meta["error"]})
 
     if face_mesh:
         output.update(meta) if not (meta := is_eye_closed(mesh, target_region)).get(
@@ -211,6 +253,9 @@ def default_engine(
         # ).get("error") else output["log"].append(
         #     {"pupil color detection": meta["error"]}
         # )
+        output.update(meta) if not (
+            meta := get_head_location(mesh, img, target_region, output)
+        ).get("error") else output["log"].append({"head location": meta["error"]})
 
     if output.get("log"):
         output["log"] = output.pop("log")
@@ -223,19 +268,19 @@ def default_engine(
 def biqt_engine(
     img_path: str,
 ) -> dict:
-    """_summary_
+    """Process image with native BIQT engine.
 
     Args:
-        img_path (str): _description_
+        img_path: Path to the image.
 
     Returns:
-        dict: _description_
+        A dictionary containing the results from BIQT.
     """
     output = {"log": [], "file": img_path}
 
     output.update(meta) if not (meta := get_biqt_attr(img_path)).get(
         "error"
-    ) else output["log"].append({"face attributes": meta["error"]})
+    ) else output["log"].append({"biqt attributes": meta["error"]})
 
     if not output["log"]:
         output.pop("log")
@@ -271,7 +316,7 @@ def get_biqt_attr(img_path: str) -> dict:
 #     except Exception as e:
 #         traceback.print_exception(e)
 #         return {"error": str(e)}
-#     return {"quality": image_quality}
+#     return {"brisque_quality": image_quality}
 
 
 # def get_attributes(img: np.array) -> dict:
@@ -303,14 +348,14 @@ def get_biqt_attr(img_path: str) -> dict:
 
 def is_smile(img: np.array) -> dict:
     try:
-        img_h, img_w, _ = img.shape
+        # img_h, img_w, _ = img.shape
         smileCascade = cv.CascadeClassifier(f"{BQAT_CWD}haarcascade_smile.xml")
         smile = smileCascade.detectMultiScale(
-            cv.cvtColor(img, cv.COLOR_BGR2GRAY),
-            scaleFactor=1.15,
-            minNeighbors=20,
-            minSize=(int(img_h / 6), int(img_w / 3)),
-            maxSize=(int(img_h / 4), int(img_w / 2)),
+            cv.resize(cv.cvtColor(img, cv.COLOR_BGR2GRAY), (128, 128)),
+            scaleFactor=1.5,
+            minNeighbors=30,
+            # minSize=(int(img_h / 6), int(img_w / 3)),
+            # maxSize=(int(img_h / 4), int(img_w / 2)),
             flags=cv.CASCADE_DO_CANNY_PRUNING,
         )
         smile = True if len(smile) >= 1 else False
@@ -348,9 +393,9 @@ def is_eye_closed(face_mesh: object, img: np.array) -> dict:
         r_l.reverse()
         l_u.reverse()
 
-        right_vertical = np.mean([euclidean(u, l) for u, l in zip(r_u, r_l)])
+        right_vertical = np.mean([euclidean(up, lo) for up, lo in zip(r_u, r_l)])
         right_horizontal = euclidean(r_c[0], r_c[1])
-        left_vertical = np.mean([euclidean(u, l) for u, l in zip(l_u, l_l)])
+        left_vertical = np.mean([euclidean(up, lo) for up, lo in zip(l_u, l_l)])
         left_horizontal = euclidean(l_c[0], l_c[1])
 
         right_ratio = right_vertical / right_horizontal
@@ -474,7 +519,7 @@ def get_orientation(face_mesh: object, img: np.array) -> dict:
             degree_yaw = -angles[1] * 360
             degree_pitch = angles[0] * 360
             degree_roll = angles[2] * 360
-        except:
+        except Exception:
             raise RuntimeError("unable to get head pose angles.")
 
         if abs(degree_yaw) < 3:
@@ -506,52 +551,71 @@ def is_glasses(face_mesh: object, img: np.array) -> dict:
     try:
         img_h, img_w, _ = img.shape
 
-        nose_bridge = [6, 197, 195, 5, 4, 1, 237, 44, 274, 457]
+        nose_bridge = [5, 9, 243, 463]
 
-        nose_bridge_x = []
-        nose_bridge_y = []
-        for i, lm in enumerate(face_mesh.landmark):
-            if i in nose_bridge:
-                nose_bridge_x.append(lm.x)
-                nose_bridge_y.append(lm.y)
-            if i == 8:
-                y_min = int(lm.y * img_h)
-            if i == 5:
-                y_max = int(lm.y * img_h)
+        nose_bridge_x = [lm.x for i, lm in enumerate(face_mesh.landmark) if i in nose_bridge]
+        nose_bridge_y = [lm.y for i, lm in enumerate(face_mesh.landmark) if i in nose_bridge]
 
+        y_min = int(min(nose_bridge_y) * img_h)
+        y_max = int(max(nose_bridge_y) * img_h)
         x_min = int(min(nose_bridge_x) * img_w)
         x_max = int(max(nose_bridge_x) * img_w)
 
-        target_area = img[x_min:x_max, y_min:y_max]
+        target_area = img[y_min:y_max, x_min:x_max]
 
-        bl = cv.GaussianBlur(target_area, (3, 3), sigmaX=0, sigmaY=0)
-        eg = cv.Canny(bl, 100, 200)
+        target_area = cv.cvtColor(target_area, cv.COLOR_BGR2GRAY)
 
-        center = eg.T[(int(len(eg.T) / 2))]
+        target_area = np.float32(target_area)
+
+        contrast_factor = 0.9
+        target_area = cv.convertScaleAbs(target_area, alpha=contrast_factor, beta=0)
+
+        sharpen_kernel = np.array(
+            [
+                [1, 2, 1],
+                [0, 0, 0],
+                [-1, -2, -1],
+            ]
+        )
+        out = cv.filter2D(target_area, -1, sharpen_kernel)
+
+        sharpen_kernel = np.array(
+            [
+                [0, -1, 0],
+                [-1, 4, -1],
+                [0, -1, 0],
+            ]
+        )
+        out = cv.filter2D(out, -1, sharpen_kernel)
+
+        edge = cv.Canny(out, threshold1=300, threshold2=500)
+
+        center = edge[:, edge.shape[1] // 2]
 
     except Exception as e:
         traceback.print_exception(e)
         return {"error": str(e)}
-    return {"glasses": True if 255 in center else False}
+    return {"glasses": True if np.any(center == 255) else False}
 
 
 def ofiq_engine(
     path: str,
     dir: bool = False,
 ) -> dict:
-    """_summary_
+    """Process image with native BQAT engine.
 
     Args:
-        dir_path (str): _description_
+        path: Path to the image or directory.
+        dir: Whether the input path is a directory.
 
     Returns:
-        dict: _description_
+        A dictionary containing the results from OFIQ.
     """
     output = {"log": []}
 
     if dir:
         if (meta := get_ofiq_attr(path, dir=dir)).get("error"):
-            output["log"].append({"face attributes": meta["error"]})
+            output["log"].append({"ofiq attributes": meta["error"]})
         output["results"] = merge_outputs(
             output.get("results", []),
             meta.get("results", []),
@@ -561,7 +625,7 @@ def ofiq_engine(
         output["file"] = path
         output.update(meta) if not (meta := get_ofiq_attr(path, dir=dir)).get(
             "error"
-        ) else output["log"].append({"face attributes": meta["error"]})
+        ) else output["log"].append({"ofiq attributes": meta["error"]})
 
     if not output["log"]:
         output.pop("log")
@@ -1041,9 +1105,19 @@ def get_image_meta(img: np.array) -> dict:
 #         # Calculate the standard deviation of the R, G, and B channels separately
 #         output_image = cv.GaussianBlur(output_image, (5, 5), 0)
 
-#         r_std = np.std(output_image[:, :, 0])
-#         g_std = np.std(output_image[:, :, 1])
-#         b_std = np.std(output_image[:, :, 2])
+#         # Remove foreground pixels
+#         r_pixels = output_image[:, :, 0].flatten()
+#         r_pixels = r_pixels[r_pixels != 111]
+
+#         g_pixels = output_image[:, :, 1].flatten()
+#         g_pixels = g_pixels[g_pixels != 111]
+
+#         b_pixels = output_image[:, :, 2].flatten()
+#         b_pixels = b_pixels[b_pixels != 111]
+
+#         r_std = np.std(r_pixels)
+#         g_std = np.std(g_pixels)
+#         b_std = np.std(b_pixels)
 
 #         # Calculate overall average color standard deviation
 #         background_uniformity = (r_std + g_std + b_std) / 3
@@ -1054,9 +1128,9 @@ def get_image_meta(img: np.array) -> dict:
 #         traceback.print_exception(e)
 #         return {"error": str(e)}
 #     return {
-#         "background_color_name": background_color,
-#         "background_color_rgb": dominant_color,
-#         "background_uniformity": background_uniformity,
+#         "background_colour_name": background_color,
+#         "background_colour_rgb": dominant_color,
+#         "background_colour_variance": background_variance,
 #     }
 
 
@@ -1166,16 +1240,12 @@ def get_image_meta(img: np.array) -> dict:
 #     }
 
 
-def fusion_engine(path: str, fusion_code: int = 6):
+def fusion_engine(path: str, fusion_code: int = 6, cpu: float = 0.8):
     def process_images(engine_func, path, pool):
         return pool.map(engine_func, [p.as_posix() for p in Path(path).rglob("*")])
 
     with multiprocessing.Pool(
-        processes=(
-            int(multiprocessing.cpu_count() * 0.7)
-            if int(multiprocessing.cpu_count() * 0.7) > 1
-            else 1
-        ),
+        processes=cpu_usage_to_processes(cpu),
     ) as pool:
         match fusion_code:
             case 3:
@@ -1215,3 +1285,346 @@ def fusion_engine(path: str, fusion_code: int = 6):
                 raise ValueError(f"Illegal fusion code: {fusion_code} (3, 5, 6, 7).")
 
         return output
+
+
+# def get_hijab(img: np.array, output: dict, margin_factor: int = 0.4) -> dict:
+#     try:
+#         img = prepare_input(
+#             img=img,
+#             meta=output,
+#             width=320,
+#             height=320,
+#             margin_factor=margin_factor,
+#             onnx=True,
+#         )
+
+#         # Detect any hijab
+#         # # Use torch model
+#         # model = YOLO(f"{CWD}hijab_classifier.pt")
+#         # model.to("cpu")
+#         # results = model(
+#         #     img,
+#         #     max_det=1,
+#         #     verbose=False,
+#         #     device="cpu",
+#         # )
+#         # hijab_detection = results[0].probs.data[2].item()
+
+#         # Use onnx model
+#         sess = ort.InferenceSession(f"{BQAT_CWD}hijab_classifier.onnx")
+#         results = sess.run(None, {sess.get_inputs()[0].name: img})
+#         hijab_detection = results[0][0][2].item()
+#         if hijab_detection < 0.1:
+#             hijab_detection = 0
+
+#         # Detect dark hijab
+#         if hijab_detection > 0.9:
+#             sess = ort.InferenceSession(f"{BQAT_CWD}hijab_dark_classifier.onnx")
+#             results = sess.run(None, {sess.get_inputs()[0].name: img})
+#             hijab_detection_dark = results[0][0][2].item()
+#             if hijab_detection_dark < 0.1:
+#                 hijab_detection_dark = 0
+#         else:
+#             hijab_detection_dark = 0
+
+#     except RuntimeError as e:
+#         return {"error": str(e)}
+#     except Exception as e:
+#         traceback.print_exception(e)
+#         return {"error": str(e)}
+#     return {
+#         "headgear_detection": hijab_detection,
+#         "headgear_detection_dark": hijab_detection_dark,
+#     }
+
+
+# def get_hijab_batch(path: str, margin_factor: int = 0.4) -> list:
+#     try:
+#         with tempfile.TemporaryDirectory() as tmpdir:
+#             results = []
+#             files = Path(path).rglob("*.*")
+#             for f in files:
+#                 result = {"file": f.as_posix(), "log": []}
+#                 try:
+#                     try:
+#                         img = cv.imread(f)
+#                         h, w, _ = img.shape
+#                         result.update(
+#                             {
+#                                 "image_height": h,
+#                                 "image_width": w,
+#                             }
+#                         )
+#                     except Exception as e:
+#                         raise RuntimeError(f"load image: {str(e)}")
+
+#                     result.update(meta) if not (meta := get_face(img)).get(
+#                         "error"
+#                     ) else result["log"].append({"face detection": meta["error"]})
+
+#                     img = prepare_input(
+#                         img=img,
+#                         meta=result,
+#                         width=320,
+#                         height=320,
+#                         margin_factor=margin_factor,
+#                     )
+#                     cv.imwrite(Path(tmpdir) / f.name, img)
+#                 except Exception as e:
+#                     result["log"].append({"hijab detector preprocessing": str(e)})
+
+#                 if not result.get("log"):
+#                     result.pop("log")
+
+#                 results.append(result)
+
+#             model = YOLO(f"{BQAT_CWD}hijab_classifier.pt")
+#             model.to("cpu")
+
+#             predicts = model(
+#                 source=tmpdir,
+#                 max_det=1,
+#                 verbose=False,
+#                 device="cpu",
+#                 stream=True,
+#             )
+
+#             temp = []
+#             count = 0
+#             for p in predicts:
+#                 count += 1
+#                 for r in results:
+#                     if Path(r["file"]).name == Path(p.path).name:
+#                         r["hijab_detection"] = p.probs.data[2].item()
+#                     temp.append(r)
+
+#             results = temp
+
+#         output = {"results": results}
+#     except Exception as e:
+#         traceback.print_exception(e)
+#         output = {"results": results, "error": str(e)}
+#     return output
+
+
+# TODO: refactor default engine with this
+def get_face(img: np.array, confidence: float = 0.7) -> dict:
+    output = {"log": []}
+    try:
+        with FaceDetection(
+            model_selection=1,  # full-range detection model
+            min_detection_confidence=confidence,
+        ) as face_detection:
+            detections = face_detection.process(cv.cvtColor(img, cv.COLOR_BGR2RGB))
+            if not getattr(detections, "detections"):
+                # print(">> fallback to short-range model.")
+                with FaceDetection(
+                    model_selection=0,  # short-range detection model
+                    min_detection_confidence=confidence,
+                ) as face_detection:
+                    detections = face_detection.process(
+                        cv.cvtColor(img, cv.COLOR_BGR2RGB)
+                    )
+                if not getattr(detections, "detections"):
+                    raise RuntimeError("no face found")
+
+            score = 0
+            index = 0
+            for detection in getattr(detections, "detections"):
+                detection_score = detection.score[0]
+                detection_label_id = detection.label_id[0]
+                if detection_score > score:
+                    score = detection_score
+                    index = detection_label_id
+            detection = getattr(detections, "detections")[index]
+            x = detection.location_data.relative_bounding_box.xmin * img.shape[1]
+            y = detection.location_data.relative_bounding_box.ymin * img.shape[0]
+            w = detection.location_data.relative_bounding_box.width * img.shape[1]
+            h = detection.location_data.relative_bounding_box.height * img.shape[0]
+            bbox = {
+                "left": int(x),
+                "upper": int(y),
+                "right": int(w + x),
+                "lower": int(h + y),
+            }
+            output.update({"face_detection": detection.score[0]})
+            output.update(
+                {
+                    "bbox_left": bbox["left"],
+                    "bbox_upper": bbox["upper"],
+                    "bbox_right": bbox["right"],
+                    "bbox_lower": bbox["lower"],
+                }
+            )
+        if not output.get("log"):
+            output.pop("log")
+    except Exception as e:
+        traceback.print_exception(e)
+        output["log"].append({"face detection": str(e)})
+        return output
+
+    return output
+
+
+# TODO: refactor default engine with this
+def get_face_mesh(img: np.array, confidence: float = 0.7) -> dict:
+    with FaceMesh(
+        static_image_mode=True,
+        min_detection_confidence=confidence,
+        max_num_faces=1,
+        refine_landmarks=True,
+    ) as model:
+        mesh = model.process(cv.cvtColor(img, cv.COLOR_BGR2RGB))
+
+    if mesh.multi_face_landmarks:
+        return mesh.multi_face_landmarks[0]
+    else:
+        raise RuntimeError("fail to get face mesh")
+
+
+# def get_colour_temperature(img: np.array) -> dict:
+#     try:
+#         img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+
+#         # Initialize a list to store temperatures
+#         temperatures = []
+
+#         # Iterate over all pixels and calculate the color temperature
+#         for row in img:
+#             for pixel in row:
+#                 r, g, b = pixel
+#                 try:
+#                     temp = rgb_to_color_temperature(r, g, b)
+#                 except Exception:
+#                     continue
+#                 temperatures.append(temp)
+
+#         # Calculate the average color temperature
+#         average_temp = np.mean(temperatures)
+
+#     except RuntimeError as e:
+#         return {"error": str(e)}
+#     except Exception as e:
+#         traceback.print_exception(e)
+#         return {"error": str(e)}
+#     return {
+#         "colour_temperature": average_temp,
+#     }
+
+
+def get_brightness_variance(img: np.array, block_size=(50, 50)) -> dict:
+    try:
+        img = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+        img = img[:, :, 2]
+        min_val = np.min(img)
+        max_val = np.max(img)
+        img = ((img - min_val) / (max_val - min_val)) * 255
+        h, w = img.shape
+        brightness_values = []
+
+        # Divide the image into blocks and calculate mean brightness for each block
+        for i in range(0, h, block_size[0]):
+            for j in range(0, w, block_size[1]):
+                block = img[i : i + block_size[0], j : j + block_size[1]]
+                mean_brightness = np.mean(block)
+                brightness_values.append(mean_brightness)
+
+        brightness_variance = np.std(brightness_values)
+
+    except RuntimeError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+    return {
+        "brightness_variance": brightness_variance,
+    }
+
+
+def get_head_location(
+    face_mesh: object,
+    img: np.array,
+    target_region: np.array,
+    output: dict,
+) -> dict:
+    try:
+        img_h, img_w, _ = target_region.shape
+
+        left_side = [127, 234, 93]
+        right_side = [356, 454, 323]
+        bottom_chin = [148, 152, 377]
+
+        head_x = [
+            lm.x
+            for i, lm in enumerate(face_mesh.landmark)
+            if i in left_side + right_side
+        ]
+        head_y = [lm.y for i, lm in enumerate(face_mesh.landmark) if i in bottom_chin]
+
+        y_max = int(int(max(head_y) * img_h) + output["bbox_upper"])
+        x_min = int(int(min(head_x) * img_w) + output["bbox_left"])
+        x_max = int(int(max(head_x) * img_w) + output["bbox_left"])
+
+        options = ImageSegmenterOptions(
+            base_options=BaseOptions(
+                model_asset_path=f"{BQAT_CWD}selfie_segmenter.tflite",
+            ),
+            running_mode=RunningMode.IMAGE,
+            output_category_mask=True,
+        )
+
+        mp_image = Image(image_format=ImageFormat.SRGB, data=img)
+
+        with ImageSegmenter.create_from_options(options) as segmenter:
+            segmented_masks = segmenter.segment(mp_image)
+            image_data = cv.cvtColor(mp_image.numpy_view(), cv.COLOR_BGR2RGB)
+
+            condition = (
+                np.stack(
+                    (segmented_masks.category_mask.numpy_view(),) * 3,
+                    axis=-1,
+                )
+                > 0.2
+            )
+
+            bg_image = np.full(
+                (
+                    image_data.shape[0],
+                    image_data.shape[1],
+                    3,
+                ),
+                0,
+                dtype=np.uint8,
+            )
+            fg_image = np.full(
+                (
+                    image_data.shape[0],
+                    image_data.shape[1],
+                    3,
+                ),
+                255,
+                dtype=np.uint8,
+            )
+            output_image = np.where(condition, fg_image, bg_image)
+
+        black_pixels = np.column_stack(np.where(output_image == 0))
+        if not black_pixels.size:
+            y_min = -1
+        else:
+            y_min, _, _ = black_pixels[np.argmin(black_pixels[:, 0])]
+            y_min = int(y_min)
+
+        # x_max, _, _ = black_pixels[np.argmax(black_pixels[:, 1])]
+        # x_min, _, _ = black_pixels[np.argmin(black_pixels[:, 1])]
+
+    except RuntimeError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        traceback.print_exception(e)
+        return {"error": str(e)}
+    return {
+        "head_top": y_min,
+        "head_bottom": y_max,
+        "head_right": x_max,
+        "head_left": x_min,
+    }

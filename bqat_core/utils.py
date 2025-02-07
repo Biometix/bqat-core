@@ -2,15 +2,17 @@ import math
 import os
 import re
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
+
+import psutil
 
 # import cv2 as cv
 # import numpy as np
-# from typing import List, Tuple
 # import webcolors
 import wsq
 from PIL import Image, ImageOps
 
+# from scipy.interpolate import interp1d
 # from shapely import area, box, intersection, union
 
 
@@ -172,6 +174,7 @@ def merge_outputs(list_a: List[dict], list_b: List[dict], key: str) -> List[dict
 #     width: int = 320,
 #     height: int = 320,
 #     margin_factor: int = 0.4,
+#     onnx: bool = False,
 # ) -> dict:
 #     h, w, _ = img.shape
 
@@ -182,34 +185,138 @@ def merge_outputs(list_a: List[dict], list_b: List[dict], key: str) -> List[dict
 
 #     margin = int((right - left) * margin_factor)
 
-#     right += margin
-#     left -= margin
-#     if right > w:
-#         img = add_padding(img, width=w + (right - w) * 2, height=h)
-#         left += right - w
-#         h, w, _ = img.shape
-#         right = w
-#     if left < 0:
-#         img = add_padding(img, width=w + (-left) * 2, height=h)
-#         right += -left
-#         h, w, _ = img.shape
-#         left = 0
+#     # # Face crop with margin of black filling
+#     # right += margin
+#     # left -= margin
+#     # if right > w:
+#     #     img = add_padding(img, width=w + (right - w) * 2, height=h)
+#     #     left += right - w
+#     #     h, w, _ = img.shape
+#     #     right = w
+#     # if left < 0:
+#     #     img = add_padding(img, width=w + (-left) * 2, height=h)
+#     #     right += -left
+#     #     h, w, _ = img.shape
+#     #     left = 0
 
-#     lower += int(margin * (1 - margin_factor))
-#     upper -= int(margin * (1 + margin_factor))
-#     if lower >= h:
-#         img = add_padding(img, width=w, height=h + (lower - h) * 2)
-#         upper += lower - h
-#         h, w, _ = img.shape
-#         lower = h
-#     if upper <= 0:
-#         img = add_padding(img, width=w, height=h + (-upper) * 2)
-#         lower += -upper
-#         h, w, _ = img.shape
-#         upper = 0
+#     # lower += int(margin * (1 - margin_factor))
+#     # upper -= int(margin * (1 + margin_factor))
+#     # if lower >= h:
+#     #     img = add_padding(img, width=w, height=h + (lower - h) * 2)
+#     #     upper += lower - h
+#     #     h, w, _ = img.shape
+#     #     lower = h
+#     # if upper <= 0:
+#     #     img = add_padding(img, width=w, height=h + (-upper) * 2)
+#     #     lower += -upper
+#     #     h, w, _ = img.shape
+#     #     upper = 0
 
+#     # Calculate face crop with margin of original image
+#     left = max(left - margin, 0)
+#     upper = max(upper - margin, 0)
+#     right = min(right + margin, w)
+#     lower = min(lower + margin, h)
+
+#     # Crop and resize
 #     img = img[upper:lower, left:right]
 #     img = resize_with_aspect_ratio(img, width=width, height=height)
 #     img = add_padding(img, width=width, height=height)
 
+#     # Additional preprocesses required by onnx model
+#     if onnx:
+#         img = cv.cvtColor(img, cv.COLOR_BGR2RGB)  # Convert BGR to RGB
+#         img = img.astype(np.float32) / 255.0  # Normalize to [0, 1]
+#         img = np.transpose(img, (2, 0, 1))  # Change shape to (C, H, W)
+#         img = np.expand_dims(img, axis=0)  # Add batch dimension
+
 #     return img
+
+
+# def rgb_to_xyz(r, g, b):
+#     # Normalize RGB to [0, 1]
+#     r /= 255.0
+#     g /= 255.0
+#     b /= 255.0
+
+#     # Apply gamma correction (sRGB to linear RGB)
+#     r = r**2.2
+#     g = g**2.2
+#     b = b**2.2
+
+#     # RGB to XYZ matrix (sRGB to XYZ D65)
+#     x = 0.4124564 * r + 0.3575761 * g + 0.1804375 * b
+#     y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b
+#     z = 0.0193339 * r + 0.1191920 * g + 0.9503041 * b
+
+#     return x, y, z
+
+
+# # Convert XYZ to chromaticity coordinates (x, y)
+# def xyz_to_chromaticity(x, y, z):
+#     total = x + y + z
+#     x_chromaticity = x / total
+#     y_chromaticity = y / total
+#     return x_chromaticity, y_chromaticity
+
+
+# # Function to calculate color temperature based on RGB
+# def rgb_to_color_temperature(r, g, b):
+#     # Step 1: Convert RGB to XYZ
+#     x, y, z = rgb_to_xyz(r, g, b)
+
+#     # Step 2: Convert XYZ to chromaticity coordinates (x, y)
+#     x_chromaticity, y_chromaticity = xyz_to_chromaticity(x, y, z)
+
+#     # Planckian locus data (approximate x, y coordinates for different temperatures)
+#     # This is a simplified version of the Planckian locus (typically we'd use a table with more points)
+#     temperature_data = np.array(
+#         [
+#             (2000, 0.450, 0.370),  # 2000K
+#             (2500, 0.433, 0.375),  # 2500K
+#             (3000, 0.410, 0.380),  # 3000K
+#             (3500, 0.389, 0.385),  # 3500K
+#             (4000, 0.380, 0.390),  # 4000K
+#             (4500, 0.371, 0.395),  # 4500K
+#             (5000, 0.363, 0.400),  # 5000K
+#             (5500, 0.356, 0.405),  # 5500K
+#             (6000, 0.350, 0.410),  # 6000K
+#             (6500, 0.345, 0.415),  # 6500K (daylight)
+#         ]
+#     )
+
+#     # Extract temperature, x, y values for interpolation
+#     temperatures = temperature_data[:, 0]
+#     x_values = temperature_data[:, 1]
+#     y_values = temperature_data[:, 2]
+
+#     # Interpolation functions for Planckian locus (x, y) to Temperature
+#     interpolate_x = interp1d(
+#         x_values, temperatures, kind="linear", fill_value="extrapolate"
+#     )
+#     interpolate_y = interp1d(
+#         y_values, temperatures, kind="linear", fill_value="extrapolate"
+#     )
+
+#     # Step 3: Interpolate the chromaticity values to find the corresponding color temperature
+#     temperature_x = interpolate_x(x_chromaticity)
+#     temperature_y = interpolate_y(y_chromaticity)
+
+#     # Return the average temperature from both x and y interpolations
+#     temperature = (temperature_x + temperature_y) / 2
+#     return round(temperature)
+
+
+def cpu_usage_to_processes(cpu_usage: float) -> int:
+    try:
+        processes = (
+            int(psutil.cpu_count(logical=False) * cpu_usage)
+            if int(psutil.cpu_count(logical=False) * cpu_usage) > 1
+            else 1
+        )
+    except Exception as e:
+        print(
+            f"Failed to get number of processes: {e}, falling back to default value '1'."
+        )
+        processes = 1
+    return processes
