@@ -63,9 +63,7 @@ def scan_iris(
     if result["resize"] or result["convert"]:
         os.remove(img_path)
 
-    if output.get("log"):
-        output["log"] = output.pop("log")
-    else:
+    if not output.get("log"):
         output.pop("log")
 
     return output

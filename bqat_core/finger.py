@@ -43,9 +43,7 @@ def scan_finger(
         "log"
     ].append({"fault detection": meta["error"]})
 
-    if output.get("log"):
-        output["log"] = output.pop("log")
-    else:
+    if not output.get("log"):
         output.pop("log")
 
     return output

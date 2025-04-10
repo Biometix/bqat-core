@@ -1,11 +1,11 @@
 import os
 import tempfile
 
-from .face import scan_face
-from .finger import scan_finger
-from .iris import scan_iris
-from .speech import process_speech
-from .utils import convert
+from bqat.bqat_core.face import scan_face
+from bqat.bqat_core.finger import scan_finger
+from bqat.bqat_core.iris import scan_iris
+from bqat.bqat_core.speech import process_speech
+from bqat.bqat_core.utils import convert
 
 SOURCE_TYPE = ["jpg", "jpeg", "bmp", "jp2", "wsq"]
 TARGET_TYPE = "png"

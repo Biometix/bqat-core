@@ -3,7 +3,9 @@ import multiprocessing
 import subprocess
 import tempfile
 import traceback
+from functools import reduce
 from io import StringIO
+from itertools import combinations
 from pathlib import Path
 from uuid import uuid4
 
@@ -27,14 +29,15 @@ from scipy.spatial.distance import euclidean
 
 # from skimage import measure
 # from sklearn.cluster import KMeans
-from .utils import (
+from bqat.bqat_core.utils import (
+    Engine,
     camel_to_snake,
     convert_values_to_number,
     # prepare_input,
     # rgb_to_color_temperature,
     cpu_usage_to_processes,
     # get_color_name,
-    merge_outputs,
+    merge_results,
 )
 
 BQAT_CWD = "BQAT/"
@@ -257,9 +260,7 @@ def default_engine(
             meta := get_head_location(mesh, img, target_region, output)
         ).get("error") else output["log"].append({"head location": meta["error"]})
 
-    if output.get("log"):
-        output["log"] = output.pop("log")
-    else:
+    if not output.get("log"):
         output.pop("log")
 
     return output
@@ -282,7 +283,7 @@ def biqt_engine(
         "error"
     ) else output["log"].append({"biqt attributes": meta["error"]})
 
-    if not output["log"]:
+    if not output.get("log"):
         output.pop("log")
 
     return output
@@ -616,11 +617,7 @@ def ofiq_engine(
     if dir:
         if (meta := get_ofiq_attr(path, dir=dir)).get("error"):
             output["log"].append({"ofiq attributes": meta["error"]})
-        output["results"] = merge_outputs(
-            output.get("results", []),
-            meta.get("results", []),
-            "file",
-        )
+        output["results"] = meta.get("results", [])
     else:
         output["file"] = path
         output.update(meta) if not (meta := get_ofiq_attr(path, dir=dir)).get(
@@ -635,28 +632,24 @@ def ofiq_engine(
 def get_ofiq_attr(path: str, dir: bool = False) -> list:
     try:
         if dir:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                temp_output = Path(tmpdir) / f"{uuid4()}.csv"
-                temp_log = Path(tmpdir) / f"{uuid4()}.log"
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_output = Path(temp_dir) / f"{uuid4()}.csv"
                 output = {"results": []}
-                try:
-                    with open(temp_log, "w") as f:
-                        subprocess.run(
-                            [
-                                f"{OFIQ_CWD}bin/OFIQSampleApp",
-                                "-c",
-                                f"{OFIQ_CWD}ofiq_config.jaxn",
-                                "-i",
-                                path,
-                                "-o",
-                                temp_output,
-                            ],
-                            stdout=f,
-                            text=True,
-                        )
-                except Exception as e:
-                    traceback.print_exception(e)
-                    raise RuntimeError(f"ofiq engine failed: {str(e)}")
+                raw = subprocess.run(
+                    [
+                        f"{OFIQ_CWD}bin/OFIQSampleApp",
+                        "-c",
+                        f"{OFIQ_CWD}ofiq_config.jaxn",
+                        "-i",
+                        path,
+                        "-o",
+                        temp_output,
+                    ],
+                    capture_output=True,
+                )
+                if error := raw.stderr.decode():
+                    output["error"] = error
+                    print(f"ofiq engine error: {error}")
                 with open(temp_output) as content:
                     lines = csv.DictReader(content, delimiter=";")
                     for line in lines:
@@ -673,22 +666,17 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
                         }
                         rectified.update(line)
                         output["results"].append(convert_values_to_number(rectified))
-                    if not output["results"]:
-                        raise RuntimeError("ofiq engine failed: empty result list")
         else:
             output = {}
-            try:
-                raw = subprocess.check_output(
-                    [
-                        f"{OFIQ_CWD}bin/OFIQSampleApp",
-                        "-c",
-                        f"{OFIQ_CWD}ofiq_config.jaxn",
-                        "-i",
-                        path,
-                    ]
-                )
-            except Exception:
-                raise RuntimeError("ofiq engine failed")
+            raw = subprocess.check_output(
+                [
+                    f"{OFIQ_CWD}bin/OFIQSampleApp",
+                    "-c",
+                    f"{OFIQ_CWD}ofiq_config.jaxn",
+                    "-i",
+                    path,
+                ]
+            )
             content = StringIO(raw.decode())
 
             # OFIQ v1.0.0-rc.1
@@ -782,9 +770,6 @@ def get_ofiq_attr(path: str, dir: bool = False) -> list:
             )
 
             output = {key: float(value) for key, value in output.items()}
-
-            if not output:
-                raise RuntimeError("ofiq engine failed")
     except Exception as e:
         traceback.print_exception(e)
         return {"error": str(e)}
@@ -1241,50 +1226,63 @@ def get_image_meta(img: np.array) -> dict:
 
 
 def fusion_engine(path: str, fusion_code: int = 6, cpu: float = 0.8):
-    def process_images(engine_func, path, pool):
-        return pool.map(engine_func, [p.as_posix() for p in Path(path).rglob("*")])
+    """Process images using multiple engines and combine results.
 
+    Args:
+        path: Path to the image or directory containing images.
+        fusion_code: Bitmask indicating which engines to use (e.g., BQAT, OFIQ, BIQT).
+        cpu: Fraction of CPU resources to allocate for multiprocessing.
+
+    Returns:
+        A dictionary containing combined results from the selected engines.
+    """
+
+    def process_images(engine_func, path, pool, chunk_size=100):
+        files = [p.as_posix() for p in Path(path).rglob("*")]
+        results = []
+        for chunk_start in range(0, len(files), chunk_size):
+            chunk = files[chunk_start : chunk_start + chunk_size]
+            results.extend(pool.imap_unordered(engine_func, chunk))
+        return results
+
+    output = {"log": []}
+    results = []
     with multiprocessing.Pool(
         processes=cpu_usage_to_processes(cpu),
     ) as pool:
-        match fusion_code:
-            case 3:
-                ofiq = ofiq_engine(path, dir=True)
-                biqt_results = process_images(biqt_engine, path, pool)
-                output = {
-                    "results": merge_outputs(biqt_results, ofiq["results"], "file"),
-                    "log": ofiq.get("log"),
-                }
-            case 5:
-                bqat_results = process_images(default_engine, path, pool)
-                biqt_results = process_images(biqt_engine, path, pool)
-                output = {
-                    "results": merge_outputs(biqt_results, bqat_results, "file"),
-                }
-            case 6:
-                ofiq = ofiq_engine(path, dir=True)
-                bqat_results = process_images(default_engine, path, pool)
-                output = {
-                    "results": merge_outputs(bqat_results, ofiq["results"], "file"),
-                    "log": ofiq.get("log"),
-                }
-            case 7:
-                ofiq = ofiq_engine(path, dir=True)
-                bqat_results = process_images(default_engine, path, pool)
-                biqt_results = process_images(biqt_engine, path, pool)
-                output = {
-                    "results": merge_outputs(biqt_results, bqat_results, "file"),
-                }
-                output = {
-                    "results": merge_outputs(
-                        output["results"], ofiq["results"], "file"
-                    ),
-                    "log": ofiq.get("log"),
-                }
-            case _:
-                raise ValueError(f"Illegal fusion code: {fusion_code} (3, 5, 6, 7).")
+        if fusion_code & Engine.BQAT:
+            results.append(("bqat", process_images(default_engine, path, pool)))
+        if fusion_code & Engine.OFIQ:
+            ofiq = ofiq_engine(path, dir=True)
+            if ofiq_logs := ofiq.get("log"):
+                output["log"].extend(ofiq_logs)
+            results.append(("ofiq", ofiq.get("results", [])))
+        if fusion_code & Engine.BIQT:
+            results.append(("biqt", process_images(biqt_engine, path, pool)))
 
-        return output
+    pairs = combinations(results, 2)
+    # Merge results from all combinations of engines
+    results = [
+        merge_results(
+            res_a=item_a[1],
+            res_b=item_b[1],
+            name_a=item_a[0],
+            name_b=item_b[0],
+        )
+        for item_a, item_b in pairs
+    ]
+
+    # Use reduce to combine all merged results into a single output
+    # This step iteratively applies merge_results to the list of results
+    combined_results = reduce(merge_results, results) if results else []
+
+    # Store the final combined results in the output dictionary
+    output["results"] = combined_results
+
+    if not output["log"]:
+        output.pop("log")
+
+    return output
 
 
 # def get_hijab(img: np.array, output: dict, margin_factor: int = 0.4) -> dict:
