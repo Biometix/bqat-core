@@ -53,7 +53,6 @@ def scan(data: str, mode: str, **params):
         case "finger" | "fingerprint":
             try:
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    converted = False
                     source = params["source"] if params.get("source") else SOURCE_TYPE
                     target = params["target"] if params.get("target") else TARGET_TYPE
                     data, input_type, output_type = convert(

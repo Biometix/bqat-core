@@ -18,23 +18,19 @@ def process_speech(
         match input_type:
             case "file":
                 # Transmitted Speech Analysis
-                if meta := get_metrics_transmitted(input_path):
-                    output.update(meta)
-                    if meta.get("error"):
-                        output["log"].append(
-                            {"transmitted speech analysis": meta.pop("error")}
-                        )
-                else:
-                    output["log"].append({"transmitted speech analysis": "no response"})
+                meta = get_metrics_transmitted(input_path)
+                if meta.get("error"):
+                    output["log"].append(
+                        {"transmitted speech analysis": meta.pop("error")}
+                    )
+                output.update(meta)
                 # Synthesized Speech Analysis
-                if meta := get_metrics_synthesized(input_path):
-                    output.update(meta)
-                    if meta.get("error"):
-                        output["log"].append(
-                            {"synthesized speech analysis": meta.pop("error")}
-                        )
-                else:
-                    output["log"].append({"synthesized speech analysis": "no response"})
+                meta = get_metrics_synthesized(input_path)
+                if meta.get("error"):
+                    output["log"].append(
+                        {"synthesized speech analysis": meta.pop("error")}
+                    )
+                output.update(meta)
             case "folder":
                 results, log = get_metrics_batch(input_path)
                 output.update({"results": results})
@@ -49,7 +45,6 @@ def process_speech(
 
 
 def get_metrics_transmitted(file_path: str) -> dict:
-    output = {}
     try:
         raw = subprocess.check_output(
             [
@@ -82,7 +77,7 @@ def get_metrics_transmitted(file_path: str) -> dict:
         output.pop("deg")
         output.pop("model")
     except Exception as e:
-        return {
+        output = {
             "quality": None,
             "noisiness": None,
             "discontinuity": None,
@@ -94,7 +89,6 @@ def get_metrics_transmitted(file_path: str) -> dict:
 
 
 def get_metrics_synthesized(file_path: str) -> dict:
-    output = {}
     try:
         raw = subprocess.check_output(
             [
@@ -121,7 +115,7 @@ def get_metrics_synthesized(file_path: str) -> dict:
         output.pop("deg")
         output.pop("model")
     except Exception as e:
-        return {
+        output = {
             "naturalness": None,
             "error": str(e),
         }
@@ -165,8 +159,11 @@ def get_metrics_batch(folder: str) -> tuple[list, list]:
         )
     try:
         combined = transmitted.merge(synthesized, on=['file'])
+        # print(f"{combined=}")
         output = combined.to_dict("records")
-        [o.update({"log": error}) for o in output]
+        # print(f"{output=}")
+        if error:
+            [o.update({"log": error}) for o in output]
     except Exception as e:
         msg = {"speech analysis output merge failed": str(e)}
         error.append(msg)
