@@ -23,6 +23,8 @@ def scan_iris(
 
     try:
         img = cv.imread(img_path)
+        if img is None:
+            raise RuntimeError("failed to open file.")
         h, w, _ = img.shape
         output.update(
             {
@@ -136,7 +138,8 @@ def resize_input(
                 break
 
     if grayscale:
-        img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        if len(img.shape) == 3 and img.shape[2] == 3:
+            img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         # img = cv.GaussianBlur(img, (11, 11), 0)
 
     if result["resize"]:

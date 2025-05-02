@@ -100,6 +100,8 @@ def default_engine(
 
     try:
         img = cv.imread(img_path)
+        if img is None:
+            raise RuntimeError("failed to open file.")
         target_region = img.copy()
         h, w, _ = img.shape
         output.update(
@@ -351,8 +353,12 @@ def is_smile(img: np.array) -> dict:
     try:
         # img_h, img_w, _ = img.shape
         smileCascade = cv.CascadeClassifier(f"{BQAT_CWD}haarcascade_smile.xml")
+        if len(img.shape) == 3 and img.shape[2] == 3:
+            gs = cv.resize(cv.cvtColor(img, cv.COLOR_BGR2GRAY), (128, 128))
+        else:
+            gs = cv.resize(img.copy(), (128, 128))
         smile = smileCascade.detectMultiScale(
-            cv.resize(cv.cvtColor(img, cv.COLOR_BGR2GRAY), (128, 128)),
+            gs,
             scaleFactor=1.5,
             minNeighbors=30,
             # minSize=(int(img_h / 6), int(img_w / 3)),
@@ -564,7 +570,11 @@ def is_glasses(face_mesh: object, img: np.array) -> dict:
 
         target_area = img[y_min:y_max, x_min:x_max]
 
-        target_area = cv.cvtColor(target_area, cv.COLOR_BGR2GRAY)
+        if not target_area.any():
+            return {"glasses": None}
+
+        if len(img.shape) == 3 and img.shape[2] == 3:
+            target_area = cv.cvtColor(target_area, cv.COLOR_BGR2GRAY)
 
         target_area = np.float32(target_area)
 
@@ -975,7 +985,10 @@ def get_face_ratio(output: dict) -> dict:
 
 def get_image_meta(img: np.array) -> dict:
     try:
-        gray_image = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        if len(img.shape) == 3 and img.shape[2] == 3:
+            gray_image = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        else:
+            gray_image = img.copy()
         brightness = np.mean(gray_image)
         laplacian = cv.Laplacian(gray_image, cv.CV_64F)
         variance = np.var(laplacian)
@@ -1214,7 +1227,10 @@ def get_image_meta(img: np.array) -> dict:
 
 # def is_blurry(img: np.array) -> dict:
 #     try:
-#         gs = cv.cvtColor(img.copy(), cv.COLOR_BGR2GRAY)
+#         if len(img.shape) == 3 and img.shape[2] == 3:
+#             gs = cv.cvtColor(img.copy(), cv.COLOR_BGR2GRAY)
+#         else:
+#             gs = img.copy()
 #         blur_metric = measure.blur_effect(gs, h_size=15)
 #         lap = cv.Laplacian(gs, cv.CV_64F)
 #     except Exception as e:

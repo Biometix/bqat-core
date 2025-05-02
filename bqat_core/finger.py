@@ -61,7 +61,10 @@ def get_nfiq2(img_path: str) -> dict:
             for k, v in output.items()
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {
+
+            "error": str(e)
+        }
     if (error := output.get(camel_to_snake("OptionalError"))) != "NA":
         return {"error": error}
     output.pop(camel_to_snake("OptionalError"))

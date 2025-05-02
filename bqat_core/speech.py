@@ -2,6 +2,7 @@ import csv
 import re
 import subprocess
 from io import StringIO
+from pathlib import Path
 
 import pandas as pd
 
@@ -13,29 +14,37 @@ def process_speech(
     input_type: str,
 ):
     output = {"log": []}
-
-
-    if input_type == "file":
-        output.update(meta) if not (meta := get_metrics_transmitted(input_path)).get(
-            "error"
-        ) else output["log"].append({"transmitted speech analysis": meta["error"]})
-        output.update(meta) if not (meta := get_metrics_synthesized(input_path)).get(
-            "error"
-        ) else output["log"].append({"synthesized speech analysis": meta["error"]})
-    elif input_type == "folder":
-        try:
-            results, log = get_metrics_batch(input_path)
-            output.update({"results": results})
-            if log:
-                output["log"].append({"speech analysis": log})
-            return output
-        except Exception as e:
-            raise RuntimeError(str(e))
-    else:
-        raise TypeError("illegal task type")
-    if not output.get("log"):
-        output.pop("log")
-
+    try:
+        match input_type:
+            case "file":
+                # Transmitted Speech Analysis
+                if meta := get_metrics_transmitted(input_path):
+                    output.update(meta)
+                    if meta.get("error"):
+                        output["log"].append(
+                            {"transmitted speech analysis": meta.pop("error")}
+                        )
+                else:
+                    output["log"].append({"transmitted speech analysis": "no response"})
+                # Synthesized Speech Analysis
+                if meta := get_metrics_synthesized(input_path):
+                    output.update(meta)
+                    if meta.get("error"):
+                        output["log"].append(
+                            {"synthesized speech analysis": meta.pop("error")}
+                        )
+                else:
+                    output["log"].append({"synthesized speech analysis": "no response"})
+            case "folder":
+                results, log = get_metrics_batch(input_path)
+                output.update({"results": results})
+                output["log"].extend(log)
+            case _:
+                raise TypeError("illegal task type")
+        if not output.get("log"):
+            output.pop("log")
+    except Exception as e:
+        raise RuntimeError(str(e))
     return output
 
 
@@ -73,7 +82,14 @@ def get_metrics_transmitted(file_path: str) -> dict:
         output.pop("deg")
         output.pop("model")
     except Exception as e:
-        return {"error": str(e)}
+        return {
+            "quality": None,
+            "noisiness": None,
+            "discontinuity": None,
+            "coloration": None,
+            "loudness": None,
+            "error": str(e),
+        }
     return output
 
 
@@ -105,39 +121,55 @@ def get_metrics_synthesized(file_path: str) -> dict:
         output.pop("deg")
         output.pop("model")
     except Exception as e:
-        return {"error": str(e)}
+        return {
+            "naturalness": None,
+            "error": str(e),
+        }
     return output
 
 
-def get_metrics_batch(folder: str) -> tuple:
+def get_metrics_batch(folder: str) -> tuple[list, list]:
     output = []
     error = []
-
     try:
         synthesized = get_metrics_synthesized_batch(folder)
     except RuntimeError as e:
-        synthesized = pd.DataFrame({})
-        msg = {"synthesized analysis": str(e)}
-        print(f">> {folder}: {msg = }")
+        msg = {"synthesized batch analysis": str(e)}
         error.append(msg)
-
+        synthesized = pd.DataFrame.from_records(
+            [
+                {
+                    "file": f.as_posix(),
+                    "naturalness": None,
+                }
+                for f in Path(folder).glob("*.wav")
+            ]
+        )
     try:
         transmitted = get_metrics_transmitted_batch(folder)
     except RuntimeError as e:
-        transmitted = pd.DataFrame({})
-        msg = {"transmitted analysis": str(e)}
-        print(f">> {folder}: {msg = }")
+        msg = {"transmitted batch analysis": str(e)}
         error.append(msg)
-
+        transmitted = pd.DataFrame.from_records(
+            [
+                {
+                    "file": f.as_posix(),
+                    "quality": None,
+                    "noisiness": None,
+                    "discontinuity": None,
+                    "coloration": None,
+                    "loudness": None,
+                }
+                for f in Path(folder).glob("*.wav")
+            ]
+        )
     try:
-        if not transmitted.empty or not synthesized.empty:
-            combined = transmitted.merge(synthesized)
-            output = combined.to_dict("records")
+        combined = transmitted.merge(synthesized, on=['file'])
+        output = combined.to_dict("records")
+        [o.update({"log": error}) for o in output]
     except Exception as e:
-        msg = {"speech analysis failed": str(e)}
-        print(f">> {folder}: {msg = }")
+        msg = {"speech analysis output merge failed": str(e)}
         error.append(msg)
-
     return output, error
 
 
@@ -178,7 +210,6 @@ def get_metrics_synthesized_batch(folder: str) -> pd.DataFrame:
         inplace=True,
     )
     outputs.drop(columns=["model"], inplace=True)
-
     return outputs
 
 
@@ -223,5 +254,4 @@ def get_metrics_transmitted_batch(folder: str) -> pd.DataFrame:
         inplace=True,
     )
     outputs.drop(columns=["model"], inplace=True)
-
     return outputs
