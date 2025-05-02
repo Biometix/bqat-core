@@ -42,7 +42,7 @@ def scan_iris(
             img_path,
             upper=(630, 470),
             lower=(400, 400),
-            format="png",
+            file_format="png",
         )  # reduce range resolution to improve robustness #17
         if result["resize"]:
             output["log"].append(
@@ -58,9 +58,13 @@ def scan_iris(
         output["log"].append({"preprocess": str(e)})
         return output
 
-    output.update(meta) if not (meta := get_attributes(img_path)).get(
-        "error"
-    ) else output["log"].append({"iris attributes": meta["error"]})
+    # Iris Analysis
+    meta = get_attributes(img_path)
+    if meta.get("error"):
+        output["log"].append(
+            {"iris image analysis": meta.pop("error")}
+        )
+    output.update(meta)
 
     if result["resize"] or result["convert"]:
         os.remove(img_path)
@@ -90,28 +94,47 @@ def get_attributes(img_path: str) -> dict:
         quality_score.update(output)
         output = quality_score
     except Exception as e:
-        return {"error": str(e)}
+        return {
+            "quality": None,
+            "contrast": None,
+            "sharpness": None,
+            "iris_diameter": None,
+            "percent_visible_iris": None,
+            "iris_pupil_gs": None,
+            "iris_sclera_gs": None,
+            "iso_overall_quality": None,
+            "iso_greyscale_utilization": None,
+            "iso_iris_pupil_concentricity": None,
+            "iso_iris_pupil_contrast": None,
+            "iso_iris_pupil_ratio": None,
+            "iso_iris_sclera_contrast": None,
+            "iso_margin_adequacy": None,
+            "iso_pupil_boundary_circularity": None,
+            "iso_sharpness": None,
+            "iso_usable_iris_area": None,
+            "error": str(e)
+        }
     return output
 
 
 def resize_input(
-    input,
+    input_path,
     upper=(1000, 680),
     lower=(256, 256),
-    format="",
+    file_format="",
     grayscale=False,
 ):
     try:
-        raw = cv.imread(input)
+        raw = cv.imread(input_path)
         img = raw.copy()
         h, w, _ = img.shape
         result = {
             "resize": False,
             "convert": False,
-            "format": format,
+            "format": file_format,
             "width": w,
             "height": h,
-            "path": input,
+            "path": input_path,
         }
     except Exception as e:
         raise RuntimeError(f"failed to load: {str(e)}")
@@ -143,19 +166,21 @@ def resize_input(
         # img = cv.GaussianBlur(img, (11, 11), 0)
 
     if result["resize"]:
-        if format:
+        if file_format:
             result["convert"] = True
-            img_path = os.path.splitext(input)[0] + f".resized.{format}"
+            img_path = os.path.splitext(input_path)[0] + f".resized.{file_format}"
         else:
-            filename, format = os.path.splitext(input)[0], os.path.splitext(input)[1]
-            img_path = filename + f".resized.{format}"
-            result["format"] = format
+            filename, file_format = os.path.splitext(input_path)[0], os.path.splitext(input_path)[1]
+            img_path = filename + f".resized.{file_format}"
+            result["format"] = file_format
         cv.imwrite(img_path, img)
     else:
-        if format:
+        if file_format:
             result["convert"] = True
-            img_path = os.path.splitext(input)[0] + f".converted.{format}"
+            img_path = os.path.splitext(input_path)[0] + f".converted.{file_format}"
             cv.imwrite(img_path, img)
+        else:
+            img_path = input_path
 
     result["path"] = img_path
     result["width"] = w
@@ -165,21 +190,21 @@ def resize_input(
 
 
 def crop_input(
-    input,
+    input_path,
 ):
     """Older version of BIQT claims it supports only 480 by 480 or 640 by 480 input
 
     Args:
-        input (_type_): _description_
+        input_path (_type_): _description_
         target (tuple, optional): _description_. Defaults to (640,480).
     """
     try:
-        img = Image.open(input)
+        img = Image.open(input_path)
         w, h = img.size
     except Exception as e:
         raise RuntimeError(f"failed to load: {str(e)}")
 
-    result = {"resize": False, "width": w, "height": h, "path": input}
+    result = {"resize": False, "width": w, "height": h, "path": input_path}
 
     if h == 480 and (w == 480 or 640):
         return result
@@ -190,8 +215,8 @@ def crop_input(
     else:
         img = ImageOps.fit(img, size=(480, 480))
 
-    filename, format = os.path.splitext(input)[0], os.path.splitext(input)[1]
-    img_path = filename + f".resized{format}"
+    filename, file_format = os.path.splitext(input_path)[0], os.path.splitext(input_path)[1]
+    img_path = filename + f".resized{file_format}"
     img.save(img_path)
 
     w, h = img.size
