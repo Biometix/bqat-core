@@ -9,7 +9,7 @@ import psutil
 
 # import cv2 as cv
 # import numpy as np
-# import webcolors
+import webcolors
 import wsq
 from PIL import Image, ImageOps
 
@@ -68,23 +68,23 @@ def convert_values_to_number(d) -> dict[str, int | float | str | bool]:
     return {k: try_convert(v) for k, v in d.items()}
 
 
-# def closest_color(requested_color):
-#     min_colors = {}
-#     for name in webcolors.names(spec=webcolors.CSS3):
-#         r_c, g_c, b_c = webcolors.name_to_rgb(name)
-#         rd = (r_c - requested_color[0]) ** 2
-#         gd = (g_c - requested_color[1]) ** 2
-#         bd = (b_c - requested_color[2]) ** 2
-#         min_colors[(rd + gd + bd)] = name
-#     return min_colors[min(min_colors.keys())]
+def closest_color(requested_color):
+    min_colors = {}
+    for name in webcolors.names(spec=webcolors.CSS3):
+        r_c, g_c, b_c = webcolors.name_to_rgb(name)
+        rd = (r_c - requested_color[0]) ** 2
+        gd = (g_c - requested_color[1]) ** 2
+        bd = (b_c - requested_color[2]) ** 2
+        min_colors[(rd + gd + bd)] = name
+    return min_colors[min(min_colors.keys())]
 
 
-# def get_color_name(requested_color):
-#     try:
-#         closest_name = webcolors.rgb_to_name(requested_color)
-#     except ValueError:
-#         closest_name = closest_color(requested_color)
-#     return closest_name
+def get_color_name(requested_color):
+    try:
+        closest_name = webcolors.rgb_to_name(requested_color)
+    except ValueError:
+        closest_name = closest_color(requested_color)
+    return closest_name
 
 
 # def get_overlap_ratio(obstacles: List[Tuple[int]], target: Tuple[int]):
@@ -377,3 +377,30 @@ class Engine(IntEnum):
     BQAT = 4
     OFIQ = 2
     BIQT = 1
+
+
+BQAT_CWD = "BQAT/"
+OFIQ_CWD = "OFIQ/"
+
+
+SETTINGS = {
+    "image_quality": False,
+    "face_attributes": False,
+    "smile_detection": True,
+    "face_offset": False,
+    "image_metadata": True,
+    "backgroud_colour": False,
+    "hair_coverage": False,
+    "image_blurriness": False,
+    "colour_temperature": False,
+    "brightness_variance": False,
+    "face_ratio": True,
+    # "headware_detection": False,
+    "eyes_detection": True,
+    "ipd_estimation": True,
+    "pose_estimation": True,
+    "glasses_detection": True,
+    "gaze_estimation": False,
+    "pupilcolor_estimation": False,
+    "head_location": True,
+}

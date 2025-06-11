@@ -62,12 +62,12 @@ def get_nfiq2(img_path: str) -> dict:
         output.pop("FingerCode")
         output.pop("Filename")
         output = {
-            "NFIQ2" if k == "QualityScore" else camel_to_snake(k): v
+            "nfiq2_score" if k == "QualityScore" else camel_to_snake(k): v
             for k, v in output.items()
         }
     except Exception as e:
         output = {
-            "NFIQ2": None,
+            "nfiq2_score": None,
             "uniform_image": None,
             "empty_image_or_contrast_too_low": None,
             "fingerprint_image_with_minutiae": None,
@@ -77,7 +77,7 @@ def get_nfiq2(img_path: str) -> dict:
         }
     if (error := output.get(camel_to_snake("OptionalError"))) != "NA":
         output = {
-            "NFIQ2": None,
+            "nfiq2_score": None,
             "uniform_image": None,
             "empty_image_or_contrast_too_low": None,
             "fingerprint_image_with_minutiae": None,
