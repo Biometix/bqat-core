@@ -1,3 +1,11 @@
+<a name="v1.6.2"></a>
+# v1.6.2 (2025-06-11)
+
+## 🛠️️ Fixes
+
+- Refactor submodule logic of processing engines 
+
+
 <a name="v1.6.1"></a>
 # v1.6.1 (2025-04-09)
 
