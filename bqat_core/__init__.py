@@ -1,5 +1,5 @@
-from bqat.bqat_core.app import scan
+from .app import scan
 
 __all__ = ["scan"]
-__version__ = "1.6.2-beta"
+__version__ = "1.6.3-beta"
 __name__ = "Biometric Quality Assessment Tool (BQAT) - Core"

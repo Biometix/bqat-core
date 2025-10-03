@@ -1,3 +1,3 @@
-from bqat_core import scan
+from .app import scan
 
 scan()

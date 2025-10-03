@@ -1,9 +1,24 @@
+<a name="v1.6.3"></a>
+# v1.6.3 (2025-09-16)
+
+## 🚀 Features
+
+- Add image file metadata
+
+## 🛠️️ Fixes
+
+- Refactor boolean value to numerical value
+- Refactor submodule import path logic
+- Fix face engine config issue
+- Fix NFIQ2 error message issue
+
+
 <a name="v1.6.2"></a>
 # v1.6.2 (2025-06-11)
 
 ## 🛠️️ Fixes
 
-- Refactor submodule logic of processing engines 
+- Refactor submodule logic of processing engines
 
 
 <a name="v1.6.1"></a>

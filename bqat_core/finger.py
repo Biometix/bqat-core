@@ -76,15 +76,7 @@ def get_nfiq2(img_path: str) -> dict:
             "error": str(e),
         }
     if (error := output.get(camel_to_snake("OptionalError"))) != "NA":
-        output = {
-            "nfiq2_score": None,
-            "uniform_image": None,
-            "empty_image_or_contrast_too_low": None,
-            "fingerprint_image_with_minutiae": None,
-            "sufficient_fingerprint_foreground": None,
-            "edge_std": None,
-            "error": error,
-        }
+        output.update({"error": error})
     output.pop(camel_to_snake("OptionalError"))
     return output
 
