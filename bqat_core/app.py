@@ -1,11 +1,11 @@
 import os
 import tempfile
 
-from bqat.bqat_core.face import scan_face
-from bqat.bqat_core.finger import scan_finger
-from bqat.bqat_core.iris import scan_iris
-from bqat.bqat_core.speech import process_speech
-from bqat.bqat_core.utils import convert
+from .face import scan_face
+from .finger import scan_finger
+from .iris import scan_iris
+from .speech import process_speech
+from .utils import convert
 
 SOURCE_TYPE = ["jpg", "jpeg", "bmp", "jp2", "wsq"]
 TARGET_TYPE = "png"
@@ -78,20 +78,24 @@ def scan(data: str, mode: str, **params):
 
         case "speech":
             try:
-                if params["type"] == "file":
-                    output = process_speech(
-                        input_path=data, input_type=params.get("type")
-                    )
-                    meta.update(output)
-                elif params["type"] == "folder":
-                    output = process_speech(
-                        input_path=data, input_type=params.get("type")
-                    )
-                    meta.update(output)
-                    if logs := output.get("log"):
-                        error.extend(logs)
-                else:
-                    raise RuntimeError("task type not provided")
+                # if params["type"] == "file":
+                #     output = process_speech(
+                #         input_path=data, input_type=params.get("type")
+                #     )
+                #     meta.update(output)
+                # elif params["type"] == "folder":
+                #     output = process_speech(
+                #         input_path=data, input_type=params.get("type")
+                #     )
+                #     meta.update(output)
+                #     if logs := output.get("log"):
+                #         error.extend(logs)
+                # else:
+                #     raise RuntimeError("task type not provided")
+                output = process_speech(input_path=data, input_type="folder")
+                meta.update(output)
+                if logs := output.get("log"):
+                    error.extend(logs)
             except Exception as e:
                 error.append(str(e))
 

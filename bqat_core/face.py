@@ -11,10 +11,9 @@ from uuid import uuid4
 
 import cv2 as cv
 import numpy as np
-
+import PIL
 # import onnxruntime
 from mediapipe import Image, ImageFormat
-
 # import imquality.brisque as bk
 # from deepface import DeepFace as df
 from mediapipe.python.solutions.face_detection import FaceDetection
@@ -26,19 +25,16 @@ from mediapipe.tasks.python.vision import (
     RunningMode,
 )
 from scipy.spatial.distance import euclidean
-
 # from skimage import measure
 from sklearn.cluster import KMeans
 
-from bqat.bqat_core.utils import (
-    BQAT_CWD,
+from .utils import BQAT_CWD  # prepare_input,; rgb_to_color_temperature,
+from .utils import (
     OFIQ_CWD,
     SETTINGS,
     Engine,
     camel_to_snake,
     convert_values_to_number,
-    # prepare_input,
-    # rgb_to_color_temperature,
     cpu_usage_to_processes,
     get_color_name,
     merge_results,
@@ -149,7 +145,9 @@ def default_engine(
     output.update(meta)
 
     # Image Metadata
-    meta = get_image_meta(img) if settings.get("image_metadata", False) else {}
+    meta = (
+        get_image_meta(img, img_path) if settings.get("image_metadata", False) else {}
+    )
     if meta.get("error"):
         output["log"].append({"Image metadata": meta.pop("error")})
     output.update(meta)
@@ -221,7 +219,7 @@ def default_engine(
     # Head Pose Estimation
     meta = (
         get_orientation(mesh, target_region)
-        if settings.get("headpose_estimation", False)
+        if settings.get("pose_estimation", False)
         else {}
     )
     if meta.get("error"):
@@ -433,7 +431,7 @@ def is_smile(img: np.array) -> dict:
             # maxSize=(int(img_h / 4), int(img_w / 2)),
             flags=cv.CASCADE_DO_CANNY_PRUNING,
         )
-        smile = True if len(smile) >= 1 else False
+        smile = 1 if len(smile) >= 1 else 0
     except Exception as e:
         traceback.print_exception(e)
         return {
@@ -480,8 +478,8 @@ def is_eye_closed(face_mesh: object, img: np.array) -> dict:
         left_ratio = left_vertical / left_horizontal
 
         threshold = 0.15
-        right = True if right_ratio < threshold else False
-        left = True if left_ratio < threshold else False
+        right = 1 if right_ratio < threshold else 0
+        left = 1 if left_ratio < threshold else 0
     except Exception as e:
         traceback.print_exception(e)
         return {
@@ -612,17 +610,17 @@ def get_orientation(face_mesh: object, img: np.array) -> dict:
             raise RuntimeError("unable to get head pose angles.")
 
         if abs(degree_yaw) < 3:
-            pose_yaw = "forward"
+            pose_yaw = "FORWARD"
         else:
-            pose_yaw = "left" if degree_yaw > 0 else "right"
+            pose_yaw = "LEFT" if degree_yaw > 0 else "RIGHT"
         if abs(degree_pitch) < 3:
-            pose_pitch = "level"
+            pose_pitch = "LEVEL"
         else:
-            pose_pitch = "up" if degree_pitch > 0 else "down"
+            pose_pitch = "UP" if degree_pitch > 0 else "DOWN"
         if abs(degree_roll) < 3:
-            pose_roll = "level"
+            pose_roll = "LEVEL"
         else:
-            pose_roll = "anti-clockwise" if degree_roll > 0 else "clockwise"
+            pose_roll = "ANTI-CLOCKWISE" if degree_roll > 0 else "CLOCKWISE"
     except Exception as e:
         traceback.print_exception(e)
         return {
@@ -703,7 +701,7 @@ def is_glasses(face_mesh: object, img: np.array) -> dict:
             "glasses": None,
             "error": str(e),
         }
-    return {"glasses": True if np.any(center == 255) else False}
+    return {"glasses": 1 if np.any(center == 255) else 0}
 
 
 def ofiq_engine(
@@ -1089,7 +1087,7 @@ def get_pupil_color(face_mesh: object, img: np.array, output: dict) -> dict:
     }
 
 
-def get_image_meta(img: np.array) -> dict:
+def get_image_meta(img: np.array, file_path: str) -> dict:
     try:
         if len(img.shape) == 3 and img.shape[2] == 3:
             gray_image = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
@@ -1107,6 +1105,11 @@ def get_image_meta(img: np.array) -> dict:
         max_val = np.mean(sorted_array[-num_elements:])
         dynamic_range = max_val - min_val
         contrast = np.std(img)
+
+        file_size_bytes = Path(file_path).stat().st_size
+        with PIL.Image.open(file_path) as img:
+            image_format = img.format
+            image_mode = img.mode
     except Exception as e:
         traceback.print_exception(e)
         return {
@@ -1115,6 +1118,9 @@ def get_image_meta(img: np.array) -> dict:
             "sharpness": None,
             # "luminance": None,
             "contrast": None,
+            "file_size": None,
+            "image_format": None,
+            "image_mode": None,
             "error": str(e),
         }
     return {
@@ -1123,6 +1129,9 @@ def get_image_meta(img: np.array) -> dict:
         "sharpness": float(variance),
         # "luminance": float(luminance),
         "contrast": contrast,
+        "file_size_bytes": file_size_bytes,
+        "image_format": image_format,
+        "image_mode": image_mode,
     }
 
 
