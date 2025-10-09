@@ -1,3 +1,39 @@
+<a name="v1.6.3"></a>
+# v1.6.3 (2025-09-16)
+
+## 🚀 Features
+
+- Add image file metadata
+
+## 🛠️️ Fixes
+
+- Refactor boolean value to numerical value
+- Refactor submodule import path logic
+- Fix face engine config issue
+- Fix NFIQ2 error message issue
+
+
+<a name="v1.6.2"></a>
+# v1.6.2 (2025-06-11)
+
+## 🛠️️ Fixes
+
+- Refactor submodule logic of processing engines
+
+
+<a name="v1.6.1"></a>
+# v1.6.1 (2025-04-09)
+
+## 🛠️️ Fixes
+
+- Fix overwritten issue for duplicated attributes in fusion mode
+- Fix overwritten issue for duplicated names in output specs 
+
+## 📎 Miscellaneous
+
+- Refactor some error log handling logic
+
+
 <a name="v1.6.0"></a>
 # v1.6.0 (2025-02-07)
 
@@ -143,7 +179,7 @@
 
 - Lower resolution to improve engine robustness [#17](https://gitlab.com/biometix/products/biometric-quality-assessment-tool/bqat-core/-/issues/17)
 
-## 📎 Miscellaneous Tasks
+## 📎 Miscellaneous
 
 - Add alternate conda env file for speech
 
@@ -151,7 +187,7 @@
 <a name="v1.3.2"></a>
 # v1.3.2 (2023-12-14)
 
-## 📎 Miscellaneous Tasks
+## 📎 Miscellaneous
 
 - Update for refactoring image building configuration
 
@@ -159,7 +195,7 @@
 <a name="v1.3.1"></a>
 # v1.3.1 (2023-07-28)
 
-## 📎 Miscellaneous Tasks
+## 📎 Miscellaneous
 
 - Cleanup cli log
 
@@ -197,7 +233,7 @@
 <a name="v1.2.0"></a>
 # v1.2.0 (2023-04-18)
 
-## 📎 Miscellaneous Tasks
+## 📎 Miscellaneous
 
 - Update Dockerfile and test cases for speech module
 
@@ -221,12 +257,10 @@
 
 - Update readme
 
-## 📎 Miscellaneous Tasks
+## 📎 Miscellaneous
 
 - Initial commit
-
 - Update gitignore
-
 - Update lock file
 
 

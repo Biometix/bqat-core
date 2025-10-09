@@ -36,16 +36,19 @@ def scan_finger(
         output["log"].append({"load image": str(e)})
         return output
 
-    output.update(meta) if not (meta := get_nfiq2(img_path)).get("error") else output[
-        "log"
-    ].append({"nfiq2": meta["error"]})
-    output.update(meta) if not (meta := detect_fault(img)).get("error") else output[
-        "log"
-    ].append({"fault detection": meta["error"]})
+    # NFIQ2 Analysis
+    meta = get_nfiq2(img_path)
+    if meta.get("error"):
+        output["log"].append({"nfiq2": meta.pop("error")})
+    output.update(meta)
 
-    if output.get("log"):
-        output["log"] = output.pop("log")
-    else:
+    # Faulty Image Detection
+    meta = detect_fault(img)
+    if meta.get("error"):
+        output["log"].append({"fault detection": meta.pop("error")})
+    output.update(meta)
+
+    if not output.get("log"):
         output.pop("log")
 
     return output
@@ -59,18 +62,26 @@ def get_nfiq2(img_path: str) -> dict:
         output.pop("FingerCode")
         output.pop("Filename")
         output = {
-            "NFIQ2" if k == "QualityScore" else camel_to_snake(k): v
+            "nfiq2_score" if k == "QualityScore" else camel_to_snake(k): v
             for k, v in output.items()
         }
     except Exception as e:
-        return {"error": str(e)}
+        output = {
+            "nfiq2_score": None,
+            "uniform_image": None,
+            "empty_image_or_contrast_too_low": None,
+            "fingerprint_image_with_minutiae": None,
+            "sufficient_fingerprint_foreground": None,
+            "edge_std": None,
+            "error": str(e),
+        }
     if (error := output.get(camel_to_snake("OptionalError"))) != "NA":
-        return {"error": error}
+        output.update({"error": error})
     output.pop(camel_to_snake("OptionalError"))
     return output
 
 
-def detect_fault(img: object) -> dict:
+def detect_fault(img) -> dict:
     """
     Checks to see if there is an issue with the image by taking a strip one pixel wide
     From the edges of the fingerprint image. If the finger print is corrupt this will have high varience
@@ -85,6 +96,10 @@ def detect_fault(img: object) -> dict:
         # lstat, p = normaltest(rres)
         # rstat, p = normaltest(rres)
         # return {"edge_skew": lstat[0] + rstat[0] }
+        edge_std = (left_std + right_std) / 2.0
     except Exception as e:
-        return {"error": str(e)}
-    return {"edge_std": (left_std + right_std) / 2.0}
+        return {
+            "edge_std": None,
+            "error": str(e),
+        }
+    return {"edge_std": edge_std}

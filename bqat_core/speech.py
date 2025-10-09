@@ -1,7 +1,8 @@
 import csv
-import json
+import re
 import subprocess
 from io import StringIO
+from pathlib import Path
 
 import pandas as pd
 
@@ -13,36 +14,37 @@ def process_speech(
     input_type: str,
 ):
     output = {"log": []}
-
-    if input_type == "file":
-        output.update(meta) if not (meta := get_metrics_transmitted(input_path)).get(
-            "error"
-        ) else output["log"].append({"transmitted speech analysis": meta["error"]})
-        output.update(meta) if not (meta := get_metrics_synthesized(input_path)).get(
-            "error"
-        ) else output["log"].append({"synthesized speech analysis": meta["error"]})
-    elif input_type == "folder":
-        try:
-            results, log = get_metrics_batch(input_path)
-            output.update({"results": results})
-            if log:
-                output["log"].append({"speech analysis": log})
-            return output
-        except Exception as e:
-            raise RuntimeError(str(e))
-    else:
-        raise TypeError("illegal task type")
-
-    if output.get("log"):
-        output["log"] = output.pop("log")
-    else:
-        output.pop("log")
-
+    try:
+        match input_type:
+            case "file":
+                # Transmitted Speech Analysis
+                meta = get_metrics_transmitted(input_path)
+                if meta.get("error"):
+                    output["log"].append(
+                        {"transmitted speech analysis": meta.pop("error")}
+                    )
+                output.update(meta)
+                # Synthesized Speech Analysis
+                meta = get_metrics_synthesized(input_path)
+                if meta.get("error"):
+                    output["log"].append(
+                        {"synthesized speech analysis": meta.pop("error")}
+                    )
+                output.update(meta)
+            case "folder":
+                results, log = get_metrics_batch(input_path)
+                output.update({"results": results})
+                output["log"].extend(log)
+            case _:
+                raise TypeError("illegal task type")
+        if not output.get("log"):
+            output.pop("log")
+    except Exception as e:
+        raise RuntimeError(str(e))
     return output
 
 
 def get_metrics_transmitted(file_path: str) -> dict:
-    output = {}
     try:
         raw = subprocess.check_output(
             [
@@ -75,12 +77,18 @@ def get_metrics_transmitted(file_path: str) -> dict:
         output.pop("deg")
         output.pop("model")
     except Exception as e:
-        return {"error": str(e)}
+        output = {
+            "quality": None,
+            "noisiness": None,
+            "discontinuity": None,
+            "coloration": None,
+            "loudness": None,
+            "error": str(e),
+        }
     return output
 
 
 def get_metrics_synthesized(file_path: str) -> dict:
-    output = {}
     try:
         raw = subprocess.check_output(
             [
@@ -107,32 +115,58 @@ def get_metrics_synthesized(file_path: str) -> dict:
         output.pop("deg")
         output.pop("model")
     except Exception as e:
-        return {"error": str(e)}
+        output = {
+            "naturalness": None,
+            "error": str(e),
+        }
     return output
 
 
-def get_metrics_batch(folder: str) -> tuple:
+def get_metrics_batch(folder: str) -> tuple[list, list]:
     output = []
     error = []
-
-    synthesized, e = get_metrics_synthesized_batch(folder)
-    if e:
-        msg = {"synthesized analysis": e}
-        print(f">> {folder}: {msg = }")
-        error.append(msg)
-
-    transmitted, e = get_metrics_transmitted_batch(folder)
-    if e:
-        msg = {"transmitted analysis": e}
-        print(f">> {folder}: {msg = }")
-        error.append(msg)
-
     try:
-        combined = transmitted.merge(synthesized)
+        synthesized = get_metrics_synthesized_batch(folder)
+    except RuntimeError as e:
+        msg = {"synthesized batch analysis": str(e)}
+        error.append(msg)
+        synthesized = pd.DataFrame.from_records(
+            [
+                {
+                    "file": f.as_posix(),
+                    "naturalness": None,
+                }
+                for f in Path(folder).glob("*.wav")
+            ]
+        )
+    try:
+        transmitted = get_metrics_transmitted_batch(folder)
+    except RuntimeError as e:
+        msg = {"transmitted batch analysis": str(e)}
+        error.append(msg)
+        transmitted = pd.DataFrame.from_records(
+            [
+                {
+                    "file": f.as_posix(),
+                    "quality": None,
+                    "noisiness": None,
+                    "discontinuity": None,
+                    "coloration": None,
+                    "loudness": None,
+                }
+                for f in Path(folder).glob("*.wav")
+            ]
+        )
+    try:
+        combined = transmitted.merge(synthesized, on=['file'])
+        # print(f"{combined=}")
         output = combined.to_dict("records")
+        # print(f"{output=}")
+        if error:
+            [o.update({"log": error}) for o in output]
     except Exception as e:
-        raise RuntimeError(json.dumps({"speech analysis failed": error}))
-
+        msg = {"speech analysis output merge failed": str(e)}
+        error.append(msg)
     return output, error
 
 
@@ -157,7 +191,12 @@ def get_metrics_synthesized_batch(folder: str) -> pd.DataFrame:
         ],
         capture_output=True,
     )
-    error = raw.stderr.decode()
+    raw_error = raw.stderr.decode()
+    if raw_error and (
+        error := (re.search(r"(\w+): (.*)$", raw_error, re.MULTILINE).group(2).strip())
+    ):
+        raise RuntimeError(error)
+
     content = StringIO(raw.stdout.decode())
     outputs = pd.read_csv(content, header=1)
     outputs.rename(
@@ -168,8 +207,7 @@ def get_metrics_synthesized_batch(folder: str) -> pd.DataFrame:
         inplace=True,
     )
     outputs.drop(columns=["model"], inplace=True)
-
-    return outputs, error
+    return outputs
 
 
 def get_metrics_transmitted_batch(folder: str) -> pd.DataFrame:
@@ -193,7 +231,12 @@ def get_metrics_transmitted_batch(folder: str) -> pd.DataFrame:
         ],
         capture_output=True,
     )
-    error = raw.stderr.decode()
+    raw_error = raw.stderr.decode()
+    if raw_error and (
+        error := (re.search(r"(\w+): (.*)$", raw_error, re.MULTILINE).group(2).strip())
+    ):
+        raise RuntimeError(error)
+
     content = StringIO(raw.stdout.decode())
     outputs = pd.read_csv(content, header=1)
     outputs.rename(
@@ -208,5 +251,4 @@ def get_metrics_transmitted_batch(folder: str) -> pd.DataFrame:
         inplace=True,
     )
     outputs.drop(columns=["model"], inplace=True)
-
-    return outputs, error
+    return outputs

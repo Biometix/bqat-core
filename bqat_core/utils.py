@@ -1,6 +1,7 @@
 import math
 import os
 import re
+from enum import IntEnum
 from pathlib import Path
 from typing import List
 
@@ -8,7 +9,7 @@ import psutil
 
 # import cv2 as cv
 # import numpy as np
-# import webcolors
+import webcolors
 import wsq
 from PIL import Image, ImageOps
 
@@ -67,23 +68,23 @@ def convert_values_to_number(d) -> dict[str, int | float | str | bool]:
     return {k: try_convert(v) for k, v in d.items()}
 
 
-# def closest_color(requested_color):
-#     min_colors = {}
-#     for name in webcolors.names(spec=webcolors.CSS3):
-#         r_c, g_c, b_c = webcolors.name_to_rgb(name)
-#         rd = (r_c - requested_color[0]) ** 2
-#         gd = (g_c - requested_color[1]) ** 2
-#         bd = (b_c - requested_color[2]) ** 2
-#         min_colors[(rd + gd + bd)] = name
-#     return min_colors[min(min_colors.keys())]
+def closest_color(requested_color):
+    min_colors = {}
+    for name in webcolors.names(spec=webcolors.CSS3):
+        r_c, g_c, b_c = webcolors.name_to_rgb(name)
+        rd = (r_c - requested_color[0]) ** 2
+        gd = (g_c - requested_color[1]) ** 2
+        bd = (b_c - requested_color[2]) ** 2
+        min_colors[(rd + gd + bd)] = name
+    return min_colors[min(min_colors.keys())]
 
 
-# def get_color_name(requested_color):
-#     try:
-#         closest_name = webcolors.rgb_to_name(requested_color)
-#     except ValueError:
-#         closest_name = closest_color(requested_color)
-#     return closest_name
+def get_color_name(requested_color):
+    try:
+        closest_name = webcolors.rgb_to_name(requested_color)
+    except ValueError:
+        closest_name = closest_color(requested_color)
+    return closest_name
 
 
 # def get_overlap_ratio(obstacles: List[Tuple[int]], target: Tuple[int]):
@@ -142,28 +143,78 @@ def convert_values_to_number(d) -> dict[str, int | float | str | bool]:
 #     return padded_image
 
 
-def merge_outputs(list_a: List[dict], list_b: List[dict], key: str) -> List[dict]:
-    output = []
-    dict_list_b = {item[key]: item for item in list_b}
+def merge_results(
+    res_a: List[dict],
+    res_b: List[dict],
+    name_a: str = "",
+    name_b: str = "",
+    key: str = "file",
+) -> List[dict]:
+    """Merges two lists of dictionaries based on a common key.
 
-    for item in list_a:
-        logs = []
-        target = item[key]
-        if item.get("log"):
-            logs.extend(item["log"])
-        if target in dict_list_b:
-            if dict_list_b[target].get("log"):
-                logs.extend(dict_list_b[target]["log"])
-            merged = item | dict_list_b[target]
+    This function combines two lists of dictionaries by matching items on a specified key.
+    When matches are found, the dictionaries are merged according to naming preferences.
+
+    Args:
+        res_a (List[dict]): First list of dictionaries to merge
+        res_b (List[dict]): Second list of dictionaries to merge
+        name_a (str, optional): Prefix for keys from first list when avoiding collisions. Defaults to "".
+        name_b (str, optional): Prefix for keys from second list when avoiding collisions. Defaults to "".
+        key (str, optional): Key to match items between lists. Defaults to "file".
+
+    Returns:
+        List[dict]: Merged list containing combined dictionaries where matches were found,
+                   and original dictionaries where no matches existed.
+
+    Example:
+        >>> res_a = [{"file": "img1.jpg", "score": 0.8}, {"file": "img2.jpg", "score": 0.9}]
+        >>> res_b = [{"file": "img1.jpg", "value": 100}, {"file": "img3.jpg", "value": 200}]
+        >>> merge_results(res_a, res_b, name_a="a", name_b="b")
+        [
+            {"file": "img1.jpg", "a_score": 0.8, "b_value": 100},
+            {"file": "img2.jpg", "score": 0.9},
+            {"file": "img3.jpg", "value": 200}
+        ]
+
+    Notes:
+        - When name_a and name_b are empty, dictionaries are merged directly using | operator
+        - When prefixes are provided, overlapping keys (except 'key', 'image_height', 'image_width')
+          are renamed using the respective prefixes
+        - Log entries from both dictionaries are concatenated
+        - Items unique to either input list are included in the output unchanged
+    """
+    output = []
+    list_b_dict = {item[key]: item for item in res_b}
+
+    for item_a in res_a:
+        logs = item_a.get("log", []).copy()
+        target = item_a[key]
+        if target in list_b_dict:
+            item_b = list_b_dict[target]
+            logs += item_b.get("log", [])
+            if not name_a and not name_b:
+                merged = item_a | list_b_dict[target]
+            else:
+                merged = item_a.copy()
+                for k in item_b.keys():
+                    if k in item_a and k not in {key, "image_height", "image_width"}:
+                        items = {
+                            f"{name_b}_{k}": item_b[k],
+                            f"{name_a}_{k}": merged.pop(k),
+                        }
+                    else:
+                        items = {k: item_b[k]}
+                    merged.update(items)
             if logs:
                 merged.update({"log": logs})
             output.append(merged)
         else:
-            output.append(item)
+            output.append(item_a.copy())
 
-    for item in list_b:
-        if item[key] not in [i[key] for i in output]:
-            output.append(item)
+    output_keys = {i[key] for i in output}
+    for item_b in res_b:
+        if item_b[key] not in output_keys:
+            output.append(item_b.copy())
 
     return output
 
@@ -320,3 +371,36 @@ def cpu_usage_to_processes(cpu_usage: float) -> int:
         )
         processes = 1
     return processes
+
+
+class Engine(IntEnum):
+    BQAT = 4
+    OFIQ = 2
+    BIQT = 1
+
+
+BQAT_CWD = "BQAT/"
+OFIQ_CWD = "OFIQ/"
+
+
+SETTINGS = {
+    "image_quality": False,
+    "face_attributes": False,
+    "smile_detection": True,
+    "face_offset": False,
+    "image_metadata": True,
+    "backgroud_colour": False,
+    "hair_coverage": False,
+    "image_blurriness": False,
+    "colour_temperature": False,
+    "brightness_variance": False,
+    "face_ratio": True,
+    # "headware_detection": False,
+    "eyes_detection": True,
+    "ipd_estimation": True,
+    "pose_estimation": True,
+    "glasses_detection": True,
+    "gaze_estimation": False,
+    "pupilcolor_estimation": False,
+    "head_location": True,
+}
