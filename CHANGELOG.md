@@ -1,3 +1,11 @@
+<a name="v1.6.4"></a>
+# v1.6.4 (2025-10-29)
+
+## 📎 Miscellaneous
+
+- Add dependency artifact for aarch64 build
+
+
 <a name="v1.6.3"></a>
 # v1.6.3 (2025-09-16)
 
