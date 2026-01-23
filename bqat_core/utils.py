@@ -381,6 +381,7 @@ class Engine(IntEnum):
 
 BQAT_CWD = "BQAT/"
 OFIQ_CWD = "OFIQ/"
+NISQA_CWD = "NISQA/"
 
 
 SETTINGS = {
@@ -389,18 +390,18 @@ SETTINGS = {
     "smile_detection": True,
     "face_offset": False,
     "image_metadata": True,
-    "backgroud_colour": False,
+    "background_colour": False,
     "hair_coverage": False,
     "image_blurriness": False,
     "colour_temperature": False,
     "brightness_variance": False,
     "face_ratio": True,
-    # "headware_detection": False,
+    # "headwear_detection": False,
     "eyes_detection": True,
     "ipd_estimation": True,
     "pose_estimation": True,
     "glasses_detection": True,
     "gaze_estimation": False,
-    "pupilcolor_estimation": False,
+    "pupil_estimation": False,
     "head_location": True,
 }
