@@ -39,7 +39,9 @@ from .utils import (
     camel_to_snake,
     convert_values_to_number,
     cpu_usage_to_processes,
+    get_aspect_ratio,
     get_color_name,
+    get_image_orientation,
     merge_results,
 )
 
@@ -1110,6 +1112,10 @@ def get_image_meta(img: np.array, file_path: str) -> dict:
         contrast = np.std(img)
 
         file_size_bytes = Path(file_path).stat().st_size
+        image_aspect_ratio = get_aspect_ratio(file_path)
+        image_orientation = get_image_orientation(file_path)
+        if isinstance(image_orientation, dict):
+            image_orientation = None  # ignore now, discussion required
         with PIL.Image.open(file_path) as img:
             image_format = img.format
             image_mode = img.mode
@@ -1124,6 +1130,8 @@ def get_image_meta(img: np.array, file_path: str) -> dict:
             "file_size": None,
             "image_format": None,
             "image_mode": None,
+            "image_orientation": None,
+            "image_aspect_ratio": None,
             "error": str(e),
         }
     return {
@@ -1135,6 +1143,8 @@ def get_image_meta(img: np.array, file_path: str) -> dict:
         "file_size_bytes": file_size_bytes,
         "image_format": image_format,
         "image_mode": image_mode,
+        "image_orientation": image_orientation,
+        "image_aspect_ratio": image_aspect_ratio,
     }
 
 

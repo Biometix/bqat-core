@@ -1,3 +1,11 @@
+<a name="v1.6.5"></a>
+# v1.6.5 (2026-01-27)
+
+## 🚀 Features
+
+- Upgrade image file metadata module
+
+
 <a name="v1.6.4"></a>
 # v1.6.4 (2025-10-29)
 

@@ -1,9 +1,11 @@
+import io
 import math
 import os
 import re
 from enum import IntEnum
+from math import gcd
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional, Union
 
 import psutil
 
@@ -11,11 +13,15 @@ import psutil
 # import numpy as np
 import webcolors
 import wsq
-from PIL import Image, ImageOps
+from PIL import ExifTags, Image, ImageOps
 
 # from scipy.interpolate import interp1d
 # from shapely import area, box, intersection, union
 
+try:
+    import lxml.etree as ET
+except Exception:
+    ET = None
 
 def convert(file, source, target, grayscale=False, directory=None):
     input_type = file.rsplit(".")[-1]
@@ -372,6 +378,200 @@ def cpu_usage_to_processes(cpu_usage: float) -> int:
         processes = 1
     return processes
 
+def _normalize_exif_orientation(value) -> Optional[int]:
+    try:
+        v = int(value)
+        if 1 <= v <= 8:
+            return v
+    except Exception:
+        pass
+    return None
+
+
+def _parse_xmp_orientation(xmp_text: str) -> Optional[int]:
+    if not xmp_text or ET is None:
+        return None
+    try:
+        root = ET.fromstring(xmp_text.encode("utf-8"))
+    except Exception:
+        return None
+    for elem in root.iter():
+        tag = ET.QName(elem).localname.lower()
+        text = (elem.text or "").strip()
+        if not text:
+            continue
+        if tag in (
+            "orientation",
+            "rotate",
+            "rotation",
+            "rotationdegrees",
+            "rotation-degrees",
+        ):
+            m = re.match(r"^(-?\d+)", text)
+            if m:
+                deg = int(m.group(1)) % 360
+                mapping = {0: 1, 90: 6, 180: 3, 270: 8}
+                return mapping.get(deg)
+            try:
+                v = int(text)
+                if 1 <= v <= 8:
+                    return v
+            except Exception:
+                pass
+    return None
+
+
+def _read_png_text_chunks(fp: io.BufferedReader) -> Dict[str, str]:
+    data = {}
+    fp.seek(0)
+    sig = fp.read(8)
+    if sig != b"\x89PNG\r\n\x1a\n":
+        return data
+    import struct
+    import zlib
+
+    while True:
+        header = fp.read(8)
+        if len(header) < 8:
+            break
+        length, chunk_type = struct.unpack(">I4s", header)
+        chunk_data = fp.read(length)
+        fp.read(4)  # crc
+        ctype = chunk_type.decode("ascii", errors="ignore")
+        if ctype in ("tEXt", "iTXt", "zTXt"):
+            try:
+                if ctype == "tEXt":
+                    raw = chunk_data
+                    if b"\x00" in raw:
+                        key, val = raw.split(b"\x00", 1)
+                        data[key.decode("latin1")] = val.decode(
+                            "latin1", errors="ignore"
+                        )
+                elif ctype == "iTXt":
+                    parts = chunk_data.split(b"\x00", 5)
+                    if len(parts) >= 6:
+                        key = parts[0].decode("latin1")
+                        text = parts[-1].decode("utf-8", errors="ignore")
+                        data[key] = text
+                elif ctype == "zTXt":
+                    key, rest = chunk_data.split(b"\x00", 1)
+                    if rest:
+                        compdata = rest[1:]
+                        try:
+                            text = zlib.decompress(compdata).decode(
+                                "latin1", errors="ignore"
+                            )
+                        except Exception:
+                            text = ""
+                        data[key.decode("latin1")] = text
+            except Exception:
+                pass
+        if ctype == "IEND":
+            break
+    return data
+
+
+def get_image_orientation(path: str) -> Optional[Union[int, Dict[str, Any]]]:
+    # 1) Pillow Exif
+    try:
+        with Image.open(path) as im:
+            exif = im.getexif()  # returns Exif object mapping tag ids -> values
+            if exif:
+                # find tag id for Orientation
+                orient_tag = None
+                for tid, name in ExifTags.TAGS.items():
+                    if name == "Orientation":
+                        orient_tag = tid
+                        break
+                if orient_tag and orient_tag in exif:
+                    val = exif.get(orient_tag)
+                    norm = _normalize_exif_orientation(val)
+                    if norm is not None:
+                        return norm
+
+            # XMP in im.info
+            xmp_text = im.info.get("xmp")
+            if xmp_text:
+                parsed = _parse_xmp_orientation(xmp_text)
+                if parsed:
+                    return parsed
+
+            # PNG chunks if PNG
+            if im.format == "PNG":
+                try:
+                    with open(path, "rb") as fp:
+                        chunks = _read_png_text_chunks(fp)
+                        for k in ("Orientation", "orientation", "rotate", "rotation"):
+                            if k in chunks:
+                                val = chunks[k].strip()
+                                m = re.match(r"^(-?\d+)", val)
+                                if m:
+                                    deg = int(m.group(1)) % 360
+                                    mapping = {0: 1, 90: 6, 180: 3, 270: 8}
+                                    if deg in mapping:
+                                        return mapping[deg]
+                                try:
+                                    v = int(val)
+                                    if 1 <= v <= 8:
+                                        return v
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+
+            # im.info other keys
+            for k, v in im.info.items():
+                if isinstance(v, str) and any(
+                    w in k.lower() for w in ("orient", "rotation", "rotate")
+                ):
+                    parsed = _parse_xmp_orientation(v)
+                    if parsed:
+                        return parsed
+    except Exception:
+        pass
+
+    # 2) Sidecar .xmp
+    base, _ = os.path.splitext(path)
+    xmp_sidecar = base + ".xmp"
+    if os.path.exists(xmp_sidecar) and ET is not None:
+        try:
+            with open(xmp_sidecar, "rb") as fh:
+                text = fh.read().decode("utf-8", errors="ignore")
+                parsed = _parse_xmp_orientation(text)
+                if parsed:
+                    return parsed
+                m = re.search(
+                    r'orientation["\']?\s*[:=]\s*["\']?([0-9\-]+)', text, re.IGNORECASE
+                )
+                if m:
+                    v = int(m.group(1))
+                    norm = _normalize_exif_orientation(v)
+                    if norm:
+                        return norm
+        except Exception:
+            pass
+
+    # 3) Inline XMP search in file bytes
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read(256000)
+            m = re.search(rb"<\?xpacket.*?</x:xmpmeta>", data, re.DOTALL)
+            if m and ET is not None:
+                parsed = _parse_xmp_orientation(
+                    m.group(0).decode("utf-8", errors="ignore")
+                )
+                if parsed:
+                    return parsed
+    except Exception:
+        pass
+
+    return None
+
+
+def get_aspect_ratio(filepath):
+    w, h = Image.open(filepath).size
+    g = gcd(w, h)
+    return f"{w // g}:{h // g}"
 
 class Engine(IntEnum):
     BQAT = 4
