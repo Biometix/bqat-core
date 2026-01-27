@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-CWD = "NISQA/"
+from .utils import NISQA_CWD
 
 
 def process_speech(
@@ -54,11 +54,11 @@ def get_metrics_transmitted(file_path: str) -> dict:
                 # "nisqa",
                 # "python",
                 "python3",
-                f"{CWD}run.py",
+                f"{NISQA_CWD}run.py",
                 "--mode",
                 "predict_file",
                 "--pretrained_model",
-                f"{CWD}weights/nisqa.tar",
+                f"{NISQA_CWD}weights/nisqa.tar",
                 "--deg",
                 file_path,
                 "--output_dir",
@@ -98,11 +98,11 @@ def get_metrics_synthesized(file_path: str) -> dict:
                 # "nisqa",
                 # "python",
                 "python3",
-                f"{CWD}run.py",
+                f"{NISQA_CWD}run.py",
                 "--mode",
                 "predict_file",
                 "--pretrained_model",
-                f"{CWD}weights/nisqa_tts.tar",
+                f"{NISQA_CWD}weights/nisqa_tts.tar",
                 "--deg",
                 file_path,
                 "--output_dir",
@@ -179,11 +179,11 @@ def get_metrics_synthesized_batch(folder: str) -> pd.DataFrame:
             # "nisqa",
             # "python",
             "python3",
-            f"{CWD}run.py",
+            f"{NISQA_CWD}run.py",
             "--mode",
             "predict_dir",
             "--pretrained_model",
-            f"{CWD}weights/nisqa_tts.tar",
+            f"{NISQA_CWD}weights/nisqa_tts.tar",
             "--data_dir",
             folder,
             "--output_dir",
@@ -219,11 +219,11 @@ def get_metrics_transmitted_batch(folder: str) -> pd.DataFrame:
             # "nisqa",
             # "python",
             "python3",
-            f"{CWD}run.py",
+            f"{NISQA_CWD}run.py",
             "--mode",
             "predict_dir",
             "--pretrained_model",
-            f"{CWD}weights/nisqa.tar",
+            f"{NISQA_CWD}weights/nisqa.tar",
             "--data_dir",
             folder,
             "--output_dir",

@@ -12,8 +12,10 @@ from uuid import uuid4
 import cv2 as cv
 import numpy as np
 import PIL
+
 # import onnxruntime
 from mediapipe import Image, ImageFormat
+
 # import imquality.brisque as bk
 # from deepface import DeepFace as df
 from mediapipe.python.solutions.face_detection import FaceDetection
@@ -25,18 +27,21 @@ from mediapipe.tasks.python.vision import (
     RunningMode,
 )
 from scipy.spatial.distance import euclidean
+
 # from skimage import measure
 from sklearn.cluster import KMeans
 
-from .utils import BQAT_CWD  # prepare_input,; rgb_to_color_temperature,
 from .utils import (
+    BQAT_CWD,  # prepare_input,; rgb_to_color_temperature,
     OFIQ_CWD,
     SETTINGS,
     Engine,
     camel_to_snake,
     convert_values_to_number,
     cpu_usage_to_processes,
+    get_aspect_ratio,
     get_color_name,
+    get_image_orientation,
     merge_results,
 )
 
@@ -153,7 +158,7 @@ def default_engine(
     output.update(meta)
 
     # Background Colour
-    meta = get_background_color(img) if settings.get("backgroud_colour", False) else {}
+    meta = get_background_color(img) if settings.get("background_colour", False) else {}
     if meta.get("error"):
         output["log"].append({"Background colour": meta.pop("error")})
     output.update(meta)
@@ -194,10 +199,10 @@ def default_engine(
         output["log"].append({"Face ratio": meta.pop("error")})
     output.update(meta)
 
-    # # Headware Detection
-    # meta = get_hijab(img, output) if settings.get("headware_detection", False) else {}
+    # # Headwear Detection
+    # meta = get_hijab(img, output) if settings.get("headwear_detection", False) else {}
     # if meta.get("error"):
-    #     output["log"].append({"Headware detection": meta.pop("error")})
+    #     output["log"].append({"Headwear detection": meta.pop("error")})
     # output.update(meta)
 
     # Eyes detection
@@ -236,7 +241,7 @@ def default_engine(
         output["log"].append({"Glasses detection": meta.pop("error")})
     output.update(meta)
 
-    # Face Offset Esimation
+    # Face Offset Estimation
     meta = get_offset(mesh, output) if settings.get("face_offset", False) else {}
     if meta.get("error"):
         output["log"].append({"Face offset": meta.pop("error")})
@@ -251,11 +256,11 @@ def default_engine(
     # Pupil Color Estimation
     meta = (
         get_pupil_color(mesh, target_region, output)
-        if settings.get("pupilcolor_estimation", False)
+        if settings.get("pupil_estimation", False)
         else {}
     )
     if meta.get("error"):
-        output["log"].append({"Pupilcolor estimation": meta.pop("error")})
+        output["log"].append({"Pupil color estimation": meta.pop("error")})
     output.update(meta)
 
     # Head Location Estimation
@@ -1107,6 +1112,10 @@ def get_image_meta(img: np.array, file_path: str) -> dict:
         contrast = np.std(img)
 
         file_size_bytes = Path(file_path).stat().st_size
+        image_aspect_ratio = get_aspect_ratio(file_path)
+        image_orientation = get_image_orientation(file_path)
+        if isinstance(image_orientation, dict):
+            image_orientation = None  # ignore now, discussion required
         with PIL.Image.open(file_path) as img:
             image_format = img.format
             image_mode = img.mode
@@ -1121,6 +1130,8 @@ def get_image_meta(img: np.array, file_path: str) -> dict:
             "file_size": None,
             "image_format": None,
             "image_mode": None,
+            "image_orientation": None,
+            "image_aspect_ratio": None,
             "error": str(e),
         }
     return {
@@ -1132,6 +1143,8 @@ def get_image_meta(img: np.array, file_path: str) -> dict:
         "file_size_bytes": file_size_bytes,
         "image_format": image_format,
         "image_mode": image_mode,
+        "image_orientation": image_orientation,
+        "image_aspect_ratio": image_aspect_ratio,
     }
 
 
